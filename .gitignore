@@ -4,3 +4,8 @@
 # Datas
 datas
 !datas/.gitkeep
+
+
+# Logs
+logs
+!logs/.gitkeep
