@@ -1,2 +1,6 @@
 # OS specifics
 .DS_Store
+
+# Datas
+datas
+!datas/.gitkeep
