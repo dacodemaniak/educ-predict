@@ -56,5 +56,5 @@ class PiplelineOrchestrator:
         for handler in handlers[1:]:
             current = current.set_next(handler)
 
-    def run(self, data):
-        return self.first_handler.handle()
+    def run(self, context):
+        return self.first_handler.handle(context)
