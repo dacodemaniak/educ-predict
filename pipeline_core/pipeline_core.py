@@ -1,5 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
+import pandas as pd
 import time
 from loguru import logger
 
@@ -40,7 +41,7 @@ class PipelineContext:
     """Centralize datas exchanged by concrete handlers"""
     def __init__(self):
         self.data_map = {}
-        self.final_df = None
+        self.final_df: pd.DataFrame | None = None
         self.metadata = {}
         self.logs = {}
         self.execution_time = {}
