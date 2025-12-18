@@ -50,11 +50,26 @@ class PipelineContext:
 class PiplelineOrchestrator:
     """Orchestrate concrete handlers"""
     def __init__(self, handlers):
-        self.first_handler = handlers[0]
+        self.handlers = []
+
+
+
+    def add_handler(self, handler: DataHandler) -> PiplelineOrchestrator:
+        """
+        Add a specific handler. Used to add regressions and classifications scenario based strategies
+        
+        :param handler: Description
+        :type handler: DataHandler
+        """
+        self.handlers.append(handler)
+        return self
+    
+    def configure_pipeline(self):
+        self.first_handler = self.handlers[0]
         current = self.first_handler
 
-        for handler in handlers[1:]:
+        for handler in self.handlers[1:]:
             current = current.set_next(handler)
-
+    
     def run(self, context):
         return self.first_handler.handle(context)
