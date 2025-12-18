@@ -49,10 +49,8 @@ class PipelineContext:
 
 class PiplelineOrchestrator:
     """Orchestrate concrete handlers"""
-    def __init__(self, handlers):
+    def __init__(self):
         self.handlers = []
-
-
 
     def add_handler(self, handler: DataHandler) -> PiplelineOrchestrator:
         """
