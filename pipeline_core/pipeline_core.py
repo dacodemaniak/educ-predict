@@ -47,12 +47,12 @@ class PipelineContext:
 
         logger.add("logs/pipeline_debug.log", rotation="10 MB", level="DEBUG")
 
-class PiplelineOrchestrator:
+class PipelineOrchestrator:
     """Orchestrate concrete handlers"""
     def __init__(self):
         self.handlers = []
 
-    def add_handler(self, handler: DataHandler) -> PiplelineOrchestrator:
+    def add_handler(self, handler: DataHandler) -> PipelineOrchestrator:
         """
         Add a specific handler. Used to add regressions and classifications scenario based strategies
         
