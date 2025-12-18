@@ -42,21 +42,46 @@ class LogisticRegressionStrategy(TrainingStrategy):
         self.exclusions = exclusions
 
     def execute(self, df: pd.DataFrame, scenario_name: str):
-        with mlflow.start_run(run_name=f"LR_{scenario_name}"):
+        with mlflow.start_run(run_name=f"LR_{scenario_name}", nested=True):
             # Filter according scenario
             cols_to_drop = self.exclusions
 
+            # Prepare model target
+            df_model = df.copy() # Working on a copy
+            y = (df_model['G3'] < 10).astype(int)
+
             # Remove target and technical cols
             X = df.drop(columns=cols_to_drop + ['G3', 'source_origin'], errors='ignore')
-            y = df['G3'] 
+            X = pd.get_dummies(X, drop_first=True) # Encode text variables
 
             model = LogisticRegression(max_iter=1000)
             model.fit(X, y)
             y_pred = model.predict(X)
 
             # Logging MLFlow
-            mlflow.log_params({"scenario": self.scenario_id, "model_type": "LR"})
-            self.log_metrics(y, y_pred, metrics_type="regression")
+            mlflow.log_params({"scenario": self.scenario_id, "model": "LogisticRegression"})
+            self.log_metrics(y, y_pred, metrics_type="classification")
             mlflow.sklearn.log_model(model, "model")
             
-            logger.info(f"🏆 Scenario {self.scenario_id} (LR) terminé.")
+            logger.info(f"🏆 Scenario {self.scenario_id} (LR) done.")
+
+
+
+class RandomForestStrategy(TrainingStrategy):
+    def __init__(self, scenario_id: str, exclusions = []):
+        self.scenario_id = scenario_id
+        self.exclusions = exclusions
+
+    def execute(self, df: pd.DataFrame, scenario_name: str):
+        with mlflow.start_run(run_name=f"RF_{scenario_name}", nested=True):
+            df_model = df.copy()
+            y = (df_model['G3'] < 10).astype(int)
+            X = pd.get_dummies(df_model.drop(columns=self.exclusions + ['G3', 'source_origin'], errors='ignore'), drop_first=True)
+
+            model = RandomForestClassifier(n_estimators=100, random_state=42)
+            model.fit(X, y)
+            y_pred = model.predict(X)
+
+            mlflow.log_params({"scenario": self.scenario_id, "model": "RandomForest"})
+            self.log_metrics(y, y_pred, metrics_type="classification")
+            mlflow.sklearn.log_model(model, "model")
