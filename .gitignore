@@ -12,3 +12,7 @@ logs
 
 # Python cache
 __pycache__
+
+# MLflow
+mlruns
+mlflow.db
