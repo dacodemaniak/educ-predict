@@ -52,6 +52,7 @@ class PipelineOrchestrator:
     """Orchestrate concrete handlers"""
     def __init__(self):
         self.handlers = []
+        self.first_handler = None
 
     def add_handler(self, handler: DataHandler) -> PipelineOrchestrator:
         """
@@ -64,6 +65,8 @@ class PipelineOrchestrator:
         return self
     
     def configure_pipeline(self):
+        if not self.handlers:
+            raise ValueError("❌ No handlers added to the pipeline")
         self.first_handler = self.handlers[0]
         current = self.first_handler
 
@@ -71,4 +74,9 @@ class PipelineOrchestrator:
             current = current.set_next(handler)
     
     def run(self, context):
-        return self.first_handler.handle(context)
+        self.configure_pipeline()
+
+        if self.first_handler:
+            return self.first_handler.handle(context)
+        else:
+            raise ValueError("❌ Pipeline is not configured properly")
