@@ -87,16 +87,24 @@ class LogisticRegressionStrategy(TrainingStrategy):
         self.exclusions = exclusions
 
     def execute(self, df: pd.DataFrame, scenario_name: str):
+        logger.info(f"🚀 Scenario {scenario_name} (LR) running...")
         with mlflow.start_run(run_name=f"LR_{scenario_name}", nested=True):
             # Filter according scenario
             cols_to_drop = self.exclusions
 
             # Prepare model target
             df_model = df.copy() # Working on a copy
+            target_col = 'G3'
+            if target_col not in df_model.columns:
+                target_col = "G3_x" if "G3_x" in df_model.columns else 'G3_y'
+
+            if not target_col in df_model.columns:
+                raise KeyError(f"La colonne cible 'G3' est introuvable. Colonnes disponibles : {df_model.columns.tolist()}")
+            
             y = (df_model['G3'] < 10).astype(int)
 
             # Remove target and technical cols
-            X = df.drop(columns=cols_to_drop + ['G3', 'source_origin'], errors='ignore')
+            X = df_model.drop(columns=cols_to_drop + ['G3', 'source_origin'], errors='ignore')
             X = pd.get_dummies(X, drop_first=True) # Encode text variables
 
             model = LogisticRegression(max_iter=1000)
@@ -128,8 +136,17 @@ class RandomForestStrategy(TrainingStrategy):
         self.exclusions = exclusions
 
     def execute(self, df: pd.DataFrame, scenario_name: str):
+        logger.info(f"🚀 Scenario {scenario_name} (RF) running...")
         with mlflow.start_run(run_name=f"RF_{scenario_name}", nested=True):
             df_model = df.copy()
+
+            target_col = 'G3'
+            if target_col not in df_model.columns:
+                target_col = "G3_x" if "G3_x" in df_model.columns else 'G3_y'
+
+            if not target_col in df_model.columns:
+                raise KeyError(f"La colonne cible 'G3' est introuvable. Colonnes disponibles : {df_model.columns.tolist()}")
+            
             y = (df_model['G3'] < 10).astype(int)
             X = pd.get_dummies(df_model.drop(columns=self.exclusions + ['G3', 'source_origin'], errors='ignore'), drop_first=True)
 
