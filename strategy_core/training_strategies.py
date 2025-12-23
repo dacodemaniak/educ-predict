@@ -45,7 +45,7 @@ class TrainingStrategy(ABC):
         plt.title(f"Confusion Matrix {scenario_name}")
         plt.ylabel('Real')
         plt.xlabel('Predicted')
-        cm_path = f"confusion_matrix_{scenario_name}.png"
+        cm_path = f"outputs/plots/confusion_matrix_{scenario_name}.png"
         plt.savefig(cm_path)
         mlflow.log_artifact(cm_path)
         plt.close()
@@ -55,7 +55,7 @@ class TrainingStrategy(ABC):
         corr = X.corr()
         sns.heatmap(corr, annot=False, cmap="coolwarm")
         plt.title(f"Features correlation - {scenario_name}")
-        corr_path = f"correlation_{scenario_name}.png"
+        corr_path = f"outputs/plots/correlation_{scenario_name}.png"
         plt.savefig(corr_path)
         mlflow.log_artifact(corr_path)
         plt.close()
@@ -69,7 +69,7 @@ class TrainingStrategy(ABC):
         RocCurveDisplay.from_predictions(y, y_prob, name=scenario_name)
         plt.plot([0,1], [0,1], "k--", label="Chance (AUC=0.5)")
         plt.title(f"ROC curve - {scenario_name}")
-        roc_path = f"roc_curve_{scenario_name}.png"
+        roc_path = f"outputs/plots/roc_curve_{scenario_name}.png"
         plt.savefig(roc_path)
         mlflow.log_artifact(roc_path)
 
@@ -119,8 +119,8 @@ class LogisticRegressionStrategy(TrainingStrategy):
             # Specific artifact Recall
             pr_display = PrecisionRecallDisplay.from_estimator(model, X, y)
             pr_display.figure_.suptitle(f"PR Curve - {scenario_name}")
-            plt.savefig("pr_curve.png")
-            mlflow.log_artifact("pr_curve.png")
+            plt.savefig("outputs/plots/pr_curve.png")
+            mlflow.log_artifact("outputs/plots/pr_curve.png")
             plt.close()
 
             # Common artifacts
