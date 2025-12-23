@@ -12,7 +12,7 @@ class FileManager:
     def __init__(self):
         self.original_data = None
 
-    def load_data(self, file_path: str) -> pd.DataFrame:
+    def load_data(self, file_path: str, sep: str = ",") -> pd.DataFrame:
         """
         Load a csv file and returns DataFrame
         
@@ -23,7 +23,7 @@ class FileManager:
         """
 
         try:
-            self.original_data = pd.read_csv(file_path)
+            self.original_data = pd.read_csv(file_path, sep=sep)
             logger.info(f"📄 Successfuly loaded data from: {file_path}")
 
             print(f"\nData shape: {self.original_data.shape}")
