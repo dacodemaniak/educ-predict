@@ -1,0 +1,39 @@
+pipeline:
+  data_processing:
+    - step: DataLoader
+      params:
+        files_to_load:
+          maths: "datas/student-mat.csv"
+          por: "datas/student-por.csv"
+        sep: ";" # Correction du séparateur ici
+
+    - step: SensitiveDataHandler
+      params:
+        sensitive_columns: ["romantic", "Dalc", "Walc"]
+
+    - step: MergerHandler
+
+    - step: OutlierHandler
+      strategy: IsolationForestStrategy
+      params:
+        contamination: 0.01
+        target_columns: ["studytime", "absences", "age"]
+
+    - step: ImputationHandler
+      strategy: AIImputationStrategy
+      params:
+        max_iter: 10
+
+    - step: DataExportHandler
+
+  learning:
+    strategies:
+      - LogisticRegressionStrategy
+      - RandomForestStrategy
+    scenarii:
+      - label: "Full_Features"
+        exclusions: []
+      - label: "No_Sensitive"
+        exclusions: ["romantic", "Dalc", "Walc"]
+      - label: "No_G1_G2"
+        exclusions: ["G1", "G2"]
