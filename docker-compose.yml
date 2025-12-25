@@ -1,0 +1,51 @@
+services:
+  backend:
+    build: ./backend
+    container_name: edupredict_api
+    volumes:
+      - ./backend/models:/app/models
+      - ./backend/outputs:/app/outputs
+      - ./backend/pipeline_config.yaml:/app/pipeline_config.yaml
+    ports:
+      - "8000:8000"
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow_server:5000
+
+    networks:
+      - app_net
+
+  frontend:
+    build: ./frontend
+    container_name: edupredict_ui
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+    networks:
+      - app_net
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: edupredict_prometheus
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - app_net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: edupredict_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+    networks:
+      - app_net
+
+networks:
+  app_net:
+    driver: bridge

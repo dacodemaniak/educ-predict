@@ -1,0 +1,7 @@
+global:
+  scrape_interval: 5s # Collect frequency
+
+scrape_configs:
+  - job_name: 'edupredict-api'
+    static_configs:
+      - targets: ['backend:8000'] # Docker service name and port
