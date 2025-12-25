@@ -29,9 +29,13 @@ Prérequis:
 
 **Cloner le dépôt**
 ```shell
-git clone https://github.com/votre-compte/edupredict.git
+git clone https://github.com/dacodemaniak/educ-predict.git
 cd edupredict
 ```
+
+**Entraîner les données**
+Vous pouvez lancer un premier entraînement directement à partir du Notebook : final_notebook
+Deux modèles seront générés dans le dossier "backend/models"
 
 **Lancer la plateforme**
 
