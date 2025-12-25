@@ -1,0 +1,13 @@
+name: Deploy Backend (GitHub)
+on: [push]
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run Tests
+        run: |
+          pip install pytest
+          pytest backend/tests/
+      - name: Build Docker
+        run: docker build -t my-reg/backend:${{ github.sha }} ./backend

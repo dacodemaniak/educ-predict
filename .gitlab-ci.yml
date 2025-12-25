@@ -1,0 +1,18 @@
+stages:
+  - test
+  - build
+
+test_backend:
+  stage: test
+  script:
+    - pip install pytest
+    - pytest backend/tests/
+
+build_backend:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - docker build -t $CI_REGISTRY/backend:$CI_COMMIT_SHA ./backend
+    - docker push $CI_REGISTRY/backend:$CI_COMMIT_SHA
