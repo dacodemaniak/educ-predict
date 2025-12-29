@@ -1,20 +1,27 @@
 import os
+from pathlib import Path
+import sys
 import yaml
 import json
 import uuid
 import time
-from core.pipeline_core.pipeline_builder import PipelineBuilder
-from core.pipeline_core.pipeline_core import PipelineContext, PipelineOrchestrator
+
 import joblib
 import pandas as pd
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Header, BackgroundTasks, Body
-from core.validators.validators import PredictionResponse, StudentInput, FullPipelineConfig as FullConfig
+from utils.validators.validators import PredictionResponse, StudentInput, FullPipelineConfig as FullConfig
 from loguru import logger
 
 # PROMETHEUS INSTRUMENTATOR
 from prometheus_fastapi_instrumentator import Instrumentator
 from prometheus_client import Counter, Gauge
+
+root_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(root_dir))
+from core.pipeline_core.pipeline_builder import PipelineBuilder
+from core.pipeline_core.pipeline_core import PipelineContext, PipelineOrchestrator
+
 
 # Sets up Prometheus monitoring
 PREDICTION_COUNT = Counter('edupredict_predictions_total', 'Total number of predictions made', ['is_failure', 'strategy'])
@@ -23,6 +30,8 @@ AVG_PROBABILITY = Gauge('edupredict_average_failure_probability', 'Average predi
 # --- 1. SETUP AND UTILS ---
 
 app = FastAPI(title="EduPredict MLOps API")
+
+Instrumentator().instrument(app).expose(app)
 
 CONFIG_BASE = "pipeline_config.yaml"
 EXP_DIR = "outputs/experiments/"
@@ -48,7 +57,6 @@ def log_inference(user_id: str, inputs: dict, outputs: dict):
 
 @app.on_event("startup")
 async def startup():
-    Instrumentator().instrument(app).expose(app)
     logger.info("🚀 FastAPI application started and Prometheus instrumentation enabled.")
 
 # --- 2. SETUP ROUTES (Labo) ---
@@ -137,7 +145,7 @@ async def predict(data: StudentInput, strategy: str = "accuracy", x_user_id: str
         # Mise à jour des métriques Prometheus
         PREDICTION_COUNT.labels(is_failure=str(prediction), strategy=strategy).inc()
         AVG_PROBABILITY.set(prob)
-        
+
         return res
     except Exception as e:
         logger.error(f"❌ Prediction error: {e}")

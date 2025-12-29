@@ -1,0 +1,20 @@
+# Python env
+__pycache__/
+*.pyc
+.env
+.venv
+env/
+venv/
+.ipynb_checkpoints/
+outputs/logs/
+mlruns/
+
+# Notebooks
+*.ipynb
+
+# Docs
+*.md
+
+# Workflows
+.gitlabs-ci.yml
+.github/workflows/

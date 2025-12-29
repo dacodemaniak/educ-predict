@@ -1,0 +1,19 @@
+# --- Core Data & ML ---
+pandas
+scikit-learn
+mlflow
+loguru
+
+# --- Viz (Used in Learn Strategies) ---
+matplotlib
+seaborn
+
+# --- Backend API ---
+fastapi
+uvicorn
+pydantic
+joblib
+
+# --- Monitoring ---
+prometheus-fastapi-instrumentator
+prometheus-client

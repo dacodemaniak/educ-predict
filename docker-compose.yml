@@ -1,6 +1,8 @@
 services:
   backend:
-    build: ./backend
+    build: 
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: edupredict_api
     volumes:
       - ./backend/models:/app/models
@@ -15,7 +17,9 @@ services:
       - app_net
 
   frontend:
-    build: ./frontend
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
     container_name: edupredict_ui
     ports:
       - "8501:8501"
@@ -28,7 +32,7 @@ services:
     image: prom/prometheus:latest
     container_name: edupredict_prometheus
     volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./backend/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
       - "9090:9090"
     networks:

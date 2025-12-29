@@ -8,13 +8,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies (check requirements.txt path, root of the project)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.backend.txt .
+RUN pip install --no-cache-dir -r requirements.backend.txt
 
 # Create directories for experiments and models
 RUN mkdir -p outputs/experiments outputs/logs models
 
-COPY . .
+COPY backend/ ./
+COPY core ./core/
 
 EXPOSE 8000
 

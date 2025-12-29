@@ -1,0 +1,4 @@
+# --- Frontend UI ---
+streamlit
+fastapi
+requests
