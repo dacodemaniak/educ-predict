@@ -6,7 +6,8 @@ import seaborn as sns
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import PrecisionRecallDisplay, RocCurveDisplay, auc, roc_curve, root_mean_squared_error, r2_score, accuracy_score, f1_score, confusion_matrix
-
+import os
+import joblib
 from loguru import logger
 
 class TrainingStrategy(ABC):
@@ -87,8 +88,10 @@ class LogisticRegressionStrategy(TrainingStrategy):
         self.exclusions = exclusions
 
     def execute(self, df: pd.DataFrame, scenario_name: str):
-        logger.info(f"🚀 Scenario {scenario_name} (LR) running...")
-        with mlflow.start_run(run_name=f"LR_{scenario_name}", nested=True):
+        algo_name = "LR"
+        logger.info(f"🚀 Scenario {scenario_name} ({algo_name}) running...")
+
+        with mlflow.start_run(run_name=f"{algo_name}_{scenario_name}", nested=True):
             # Filter according scenario
             cols_to_drop = self.exclusions
 
@@ -99,13 +102,24 @@ class LogisticRegressionStrategy(TrainingStrategy):
                 target_col = "G3_x" if "G3_x" in df_model.columns else 'G3_y'
 
             if not target_col in df_model.columns:
-                raise KeyError(f"La colonne cible 'G3' est introuvable. Colonnes disponibles : {df_model.columns.tolist()}")
+                raise KeyError(f"Target column 'G3' was not found. Available columns: {df_model.columns.tolist()}")
             
             y = (df_model['G3'] < 10).astype(int)
 
             # Remove target and technical cols
             X = df_model.drop(columns=cols_to_drop + ['G3', 'source_origin'], errors='ignore')
-            X = pd.get_dummies(X, drop_first=True) # Encode text variables
+            X = pd.get_dummies(df_model.drop(columns=self.exclusions + ['G3', 'source_origin'], errors='ignore'), drop_first=True) # Encode text variables
+            feature_names = X.columns.tolist()
+
+            # Save feature names
+            temp_feat_file = "backend/models/feature_names.pkl"
+            joblib.dump(feature_names, temp_feat_file)
+            mlflow.log_artifact(temp_feat_file)
+            mlflow.set_tag("algorithm",algo_name)
+            
+            # Clean up temp file
+            if os.path.exists(temp_feat_file):
+                os.remove(temp_feat_file)
 
             model = LogisticRegression(max_iter=1000)
             model.fit(X, y)
@@ -126,9 +140,7 @@ class LogisticRegressionStrategy(TrainingStrategy):
             # Common artifacts
             self.save_artifacts(model, X, y, y_pred, scenario_name)
 
-            logger.info(f"🏆 Scenario {self.scenario_id} (LR) done.")
-
-
+            logger.info(f"🏆 Scenario {self.scenario_id} ({algo_name}) done.")
 
 class RandomForestStrategy(TrainingStrategy):
     def __init__(self, scenario_id: str, exclusions = []):
@@ -136,8 +148,10 @@ class RandomForestStrategy(TrainingStrategy):
         self.exclusions = exclusions
 
     def execute(self, df: pd.DataFrame, scenario_name: str):
-        logger.info(f"🚀 Scenario {scenario_name} (RF) running...")
-        with mlflow.start_run(run_name=f"RF_{scenario_name}", nested=True):
+        algo_name = "RF"
+
+        logger.info(f"🚀 Scenario {scenario_name} ({algo_name}) running...")
+        with mlflow.start_run(run_name=f"{algo_name}_{scenario_name}", nested=True):
             df_model = df.copy()
 
             target_col = 'G3'
@@ -145,13 +159,62 @@ class RandomForestStrategy(TrainingStrategy):
                 target_col = "G3_x" if "G3_x" in df_model.columns else 'G3_y'
 
             if not target_col in df_model.columns:
-                raise KeyError(f"La colonne cible 'G3' est introuvable. Colonnes disponibles : {df_model.columns.tolist()}")
+                raise KeyError(f"Target column 'G3' was not found. Available columns: {df_model.columns.tolist()}")
             
             y = (df_model['G3'] < 10).astype(int)
             X = pd.get_dummies(df_model.drop(columns=self.exclusions + ['G3', 'source_origin'], errors='ignore'), drop_first=True)
 
+            feature_names = X.columns.tolist()
+
+            # Save feature names
+            temp_feat_file = "backend/models/feature_names.pkl"
+            joblib.dump(feature_names, temp_feat_file)
+            mlflow.log_artifact(temp_feat_file)
+            mlflow.set_tag("algorithm",algo_name)
+            # Clean up temp file
+            if os.path.exists(temp_feat_file):
+                os.remove(temp_feat_file)
+
             model = RandomForestClassifier(n_estimators=100, random_state=42)
             model.fit(X, y)
+
+            # Build graphs and artifacts
+            import numpy as np
+            # 1. Feature Importance Plot
+            importances = model.feature_importances_
+            indices = np.argsort(importances[-10:]) # 10 bests
+            plt.figure(figsize=(10, 6))
+            plt.title("RF Importances top ten")
+            plt.barh(range(len(indices)), importances[indices], align="center")
+            plt.yticks(range(len(indices)), [X.columns[i] for i in indices])
+            plt.xlabel("Relative Importance")
+            plt.tight_layout()
+
+            # Save and log
+            feat_imp_path = "outputs/plots/rf_feature_importance.png"
+            plt.savefig(feat_imp_path)
+            mlflow.log_artifact(feat_imp_path)
+            plt.close()
+
+            # Precision-Recall Curve
+            from sklearn.metrics import PrecisionRecallDisplay
+            fig, ax = plt.subplots(figsize=(8, 6))
+            PrecisionRecallDisplay.from_estimator(model, X, y, ax=ax)
+            ax.set_title(f"Precision-Recall Curve - {scenario_name}")
+            pr_path = "outputs/plots/rf_precision_recall.png"
+            plt.savefig(pr_path)
+            # Log
+            mlflow.log_artifact(pr_path)
+            plt.close()
+
+            # One Tree
+            from sklearn.tree import plot_tree
+            plt.figure(figsize=(20, 10))
+            plot_tree(model.estimators_[0], max_depth=3, feature_names=X.columns.tolist(), filled=True, rounded=True)
+            plt.savefig("outputs/plots/rf_individual_tree.png")
+            mlflow.log_artifact("outputs/plots/rf_individual_tree.png")
+            plt.close()
+            
             y_pred = model.predict(X)
 
             mlflow.log_params({"scenario": self.scenario_id, "model": "RandomForest"})
