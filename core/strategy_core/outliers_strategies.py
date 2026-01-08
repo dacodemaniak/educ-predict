@@ -49,7 +49,11 @@ class IsolationForestStrategy(OutlierStrategy):
     IsolationForest infer multidimensional datas instead of focus on a set of columns
     """
     def __init__(self, contamination: float = 0.05) -> None:
-        self.contamination = contamination
+        try:
+            self.contamination = float(contamination) if contamination is not None else 0.05
+        except (ValueError, TypeError):
+            self.contamination = 0.05
+        
         super().__init__()
 
     def detect_and_clean(self, df: pd.DataFrame, columns: list) -> pd.DataFrame:

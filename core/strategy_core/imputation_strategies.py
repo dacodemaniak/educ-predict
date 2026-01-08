@@ -23,14 +23,24 @@ class AIImputationStrategy(ImputationStrategy):
     Useful when the dataset is really big, hard to visually estimate
     """
     def __init__(self, max_iter=10) -> None:
-        self.imputer = IterativeImputer(max_iter=max_iter, random_state=42)
+        try:
+            clean_max_iter = int(max_iter) if max_iter is not None else 10
+        except (ValueError, TypeError):
+            clean_max_iter = 10
+        
+        self.imputer = IterativeImputer(max_iter=clean_max_iter, random_state=42)
         super().__init__()
 
     def apply(self, df: pd.DataFrame, columns: list) -> pd.DataFrame:
+        if not columns: return df
+
         df_to_impute = df.copy()
 
-        # Process only numerical datas
-        df_to_impute[columns] = self.imputer.fit_transform(df_to_impute[columns])
+        cols_present = [c for c in columns if c in df_to_impute.columns]
+
+        if cols_present:
+            # Process only numerical datas
+            df_to_impute[columns] = self.imputer.fit_transform(df_to_impute[columns])
 
         return df_to_impute
     
