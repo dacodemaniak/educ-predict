@@ -10,8 +10,19 @@ datas
 logs
 !logs/.gitkeep
 
+# Outputs
+outputs
+!outputs/.gitkeep
+outputs/data_processed
+!outputs/data_processed/.gitkeep
+outputs/plots
+!outputs/plots/.gitkeep
+
 # Python cache
 __pycache__
+
+# Python environment
+.python-version
 
 # MLflow
 mlruns
