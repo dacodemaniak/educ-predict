@@ -1,6 +1,8 @@
+from contextlib import asynccontextmanager
 import os
 from pathlib import Path
 import sys
+from fastapi.encoders import jsonable_encoder
 import yaml
 import json
 import uuid
@@ -10,7 +12,7 @@ import joblib
 import pandas as pd
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Header, BackgroundTasks, Body
-from utils.validators.validators import PredictionResponse, StudentInput, FullPipelineConfig as FullConfig
+from backend.utils.validators.validators import PredictionResponse, StudentInput, FullPipelineConfig as FullConfig
 from loguru import logger
 
 # PROMETHEUS INSTRUMENTATOR
@@ -33,10 +35,14 @@ app = FastAPI(title="EduPredict MLOps API")
 
 Instrumentator().instrument(app).expose(app)
 
+BASE_DIR = Path(__file__).resolve().parent
+
 CONFIG_BASE = "pipeline_config.yaml"
 EXP_DIR = "outputs/experiments/"
 LOG_FILE = "outputs/logs/inference_history.json"
-MODELS_DIR = "models/"
+MODELS_DIR = BASE_DIR / "models"
+
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 os.makedirs(EXP_DIR, exist_ok=True)
 os.makedirs("outputs/logs/", exist_ok=True)
@@ -81,9 +87,19 @@ def apply_pipeline_rules(df: pd.DataFrame, feature_names: list) -> pd.DataFrame:
             
     return final_df.fillna(0)
 
-@app.on_event("startup")
-async def startup():
-    logger.info("🚀 FastAPI application started and Prometheus instrumentation enabled.")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Logique au démarrage
+    logger.info("🚀 Starting EduPredict API...")
+    
+    # Technicals checks at startup
+    if not any(MODELS_DIR.iterdir()):
+        logger.warning(f"⚠️ No models was found in {MODELS_DIR}. L'API may failed.")
+    
+    yield # L'application tourne ici
+    
+    # Logique à la fermeture
+    logger.info("🛑 Stopping API...")
 
 # --- 2. SETUP ROUTES (Labo) ---
 
@@ -146,11 +162,11 @@ async def trigger_training(background_tasks: BackgroundTasks, config_id: str | N
 async def predict(strategy: str, data: StudentInput, x_user_id: str = Header(default="anonymous")):
     try:
         # 1. Model and features loading
-        model_path = MODELS_DIR + f"models/student_model_{strategy}_latest.joblib"
-        feat_path = MODELS_DIR + f"feature_names_{strategy}_latest.pkl"
+        model_path = MODELS_DIR / f"student_model_{strategy}_latest.joblib"
+        feat_path = MODELS_DIR / f"feature_names_{strategy}_latest.pkl"
 
         if not os.path.exists(model_path) or not os.path.exists(feat_path):
-            raise HTTPException(status_code=404, detail="Model or features not found")
+            raise HTTPException(status_code=404, detail=f"Model or features not found : {model_path} {feat_path}")
         
         model = joblib.load(model_path)
         expected_features = joblib.load(feat_path)
@@ -173,13 +189,13 @@ async def predict(strategy: str, data: StudentInput, x_user_id: str = Header(def
         }
         
         # 4. Journalisation
-        log_inference(x_user_id, data.model_dump(), res)
+        log_inference(x_user_id, data.model_dump(), jsonable_encoder(res))
         
         # Mise à jour des métriques Prometheus
         PREDICTION_COUNT.labels(is_failure=str(prediction), strategy=strategy).inc()
         AVG_PROBABILITY.set(prob)
 
-        return res
+        return jsonable_encoder(res)
     except Exception as e:
         logger.error(f"❌ Prediction error: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error during inference")
