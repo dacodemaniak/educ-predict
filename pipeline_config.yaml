@@ -13,6 +13,20 @@ pipeline:
 
     - step: MergerHandler
 
+    - step: MinimizerHandler
+      params:
+        mapping:
+          Mjob: {"health": "other", "at_home": "other"}
+          Fjob: {"health": "other", "at_home": "other"}
+
+    - step: AnonymizerHandler
+      params:
+        binning_rules:
+          age_limit: 19
+          mask_school: true
+
+    - step: EncodingHandler # Préparation finale pour le Random Forest
+
     - step: OutlierHandler
       strategy: IsolationForestStrategy
       params:
@@ -24,6 +38,10 @@ pipeline:
       params:
         max_iter: 10
 
+    - step: ComplianceAuditHandler
+      params:
+        output_dir: "outputs"
+        
     - step: DataExportHandler
 
   learning:
