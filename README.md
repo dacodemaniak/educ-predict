@@ -59,8 +59,14 @@ Le système permet une analyse fine via deux métriques pivots, essentielles pou
 | Méthode | Route | Description |
 | ---- | ---- | ---- |
 | GET | /health | État de santé de l'API et présence des modèles |
-| POST | /predict | Inférence avec choix du modèle (*accuracy* vs *auc*) |
+| POST | /predict/{strategy} | Inférence avec choix du modèle (*accuracy* vs *auc*) |
 | POST| /train | Lance l'entraînement monitoré (Background Task). |
 | GET | /configuration | Récupère la configuration YAML de référence. |
 | POST| /configuration/experiment| Valide et sauvegarde une nouvelle configuration expérimentale |
 
+## Testing
+
+- **api** : 
+```shell
+python -m pytest ./backend/tests/unit/test_api.py
+```
