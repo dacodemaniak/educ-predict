@@ -116,6 +116,7 @@ class LogisticRegressionStrategy(TrainingStrategy):
             joblib.dump(feature_names, temp_feat_file)
             mlflow.log_artifact(temp_feat_file)
             mlflow.set_tag("algorithm",algo_name)
+            mlflow.set_tag("scenario", scenario_name)
             
             # Clean up temp file
             if os.path.exists(temp_feat_file):
@@ -171,6 +172,8 @@ class RandomForestStrategy(TrainingStrategy):
             joblib.dump(feature_names, temp_feat_file)
             mlflow.log_artifact(temp_feat_file)
             mlflow.set_tag("algorithm",algo_name)
+            mlflow.set_tag("scenario", scenario_name)
+
             # Clean up temp file
             if os.path.exists(temp_feat_file):
                 os.remove(temp_feat_file)
