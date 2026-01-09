@@ -30,15 +30,11 @@ class StudentInput(BaseModel):
     nursery: Literal["yes", "no"]
     higher: Literal["yes", "no"]
     internet: Literal["yes", "no"]
-    romantic: Literal["yes", "no"]
 
     # --- Leasure and relationships (Scale 1..5) ---
     famrel: int = Field(..., ge=1, le=5)
     freetime: int = Field(..., ge=1, le=5)
     goout: int = Field(..., ge=1, le=5)
-    Dalc: int = Field(..., ge=1, le=5, description="Week alcohol habits")
-    Walc: int = Field(..., ge=1, le=5, description="Weekend alchol habits")
-    health: int = Field(..., ge=1, le=5)
     
     # --- Results and absences ---
     absences: int = Field(..., ge=0, le=93)

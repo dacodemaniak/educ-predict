@@ -54,6 +54,32 @@ def log_inference(user_id: str, inputs: dict, outputs: dict):
         f.write(json.dumps(log_entry) + "\n")
     logger.info(f"📝 Inference logged for user {user_id}")
 
+# PRE-PROCESSING FUNCTION ---
+def apply_pipeline_rules(df: pd.DataFrame, feature_names: list) -> pd.DataFrame:
+    """Apply compliance rules and encoding for inference"""
+    
+    # A. Minimization (Mjob, Fjob) - Must be identical to pipeline
+    mapping = {"health": "other", "at_home": "other", "teacher": "other"}
+    df["Mjob"] = df["Mjob"].replace(mapping)
+    df["Fjob"] = df["Fjob"].replace(mapping)
+
+    # B. Anonymization (Age limit)
+    df["age"] = df["age"].apply(lambda x: x if x < 19 else 19)
+
+    # C. Encodage One-Hot
+    # Columns generation and alignment to feature_names
+    df_encoded = pd.get_dummies(df)
+    
+    # Critical alignment : Add missing columns with 0
+    # remove extra columns
+    final_df = pd.DataFrame(columns=feature_names)
+    for col in feature_names:
+        if col in df_encoded.columns:
+            final_df[col] = df_encoded[col]
+        else:
+            final_df[col] = 0 # Non present feature
+            
+    return final_df.fillna(0)
 
 @app.on_event("startup")
 async def startup():
@@ -116,19 +142,26 @@ async def trigger_training(background_tasks: BackgroundTasks, config_id: str | N
     background_tasks.add_task(run_training)
     return {"message": "Training pipeline started in background", "monitor_url": "/mlflow"}
 
-@app.post("/predict", response_model=PredictionResponse)
-async def predict(data: StudentInput, strategy: str = "accuracy", x_user_id: str = Header(default="anonymous")):
+@app.post("/predict/{strategy}", response_model=PredictionResponse)
+async def predict(strategy: str, data: StudentInput, x_user_id: str = Header(default="anonymous")):
     try:
-        # 1. Sélection du modèle
-        path = f"models/student_model_{strategy}_latest.joblib"
-        model = joblib.load(path)
+        # 1. Model and features loading
+        model_path = MODELS_DIR + f"models/student_model_{strategy}_latest.joblib"
+        feat_path = MODELS_DIR + f"feature_names_{strategy}_latest.pkl"
+
+        if not os.path.exists(model_path) or not os.path.exists(feat_path):
+            raise HTTPException(status_code=404, detail="Model or features not found")
         
-        # 2. Inférence
+        model = joblib.load(model_path)
+        expected_features = joblib.load(feat_path)
+
+        # 2. Data transform
         input_df = pd.DataFrame([data.model_dump()])
-        input_df_encoded = pd.get_dummies(input_df) 
-        
-        prediction = model.predict(input_df_encoded)[0]
-        prob = model.predict_proba(input_df_encoded)[0][1]
+        prepared_df = apply_pipeline_rules(input_df, expected_features)
+
+        # 3. Inference
+        prediction = model.predict(prepared_df)[0]
+        prob = model.predict_proba(prepared_df)[0][1]
         
         # 3. Préparation de la réponse
         res = {
