@@ -14,7 +14,7 @@ class DataLoader(DataHandler):
     def process(self, context: PipelineContext) -> PipelineContext:
         """
         """
-        from file_handling_core.file_manager import FileManager
+        from core.file_handling_core.file_manager import FileManager
        
 
         file_manager = FileManager()
