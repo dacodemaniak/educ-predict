@@ -48,6 +48,13 @@ L'interface est alors accessible sur :
 - **UI Streamlit** : http://localhost:8501
 - **API Documentation** : http://localhost:8000/docs
 
+**Utilisation locale**
+
+```shell
+uvicorn backend.student_api:app --reload --host 127.0.0.1 --port 8000
+streamlit run ./frontend/streamlit_app.py # IHM
+```
+
 ## 📊 Analyse des Métriques & Performance
 
 Le système permet une analyse fine via deux métriques pivots, essentielles pour l'interprétation pédagogique :
