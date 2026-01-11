@@ -7,11 +7,11 @@ import yaml
 import json
 import uuid
 import time
-
+import mlflow.tracking
 import joblib
 import pandas as pd
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, Header, BackgroundTasks, Body
+from fastapi import FastAPI, HTTPException, Header, BackgroundTasks, Body, Response
 from backend.utils.validators.validators import PredictionResponse, StudentInput, FullPipelineConfig as FullConfig
 from loguru import logger
 
@@ -46,6 +46,12 @@ MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 os.makedirs(EXP_DIR, exist_ok=True)
 os.makedirs("outputs/logs/", exist_ok=True)
+
+# Helper for artifacts retreiving
+DB_PATH = os.path.abspath(os.path.join(os.getcwd(), "mlflow.db"))
+tracking_uri = f'sqlite:///{DB_PATH}'
+mlflow.set_tracking_uri(tracking_uri)
+client = mlflow.tracking.MlflowClient()
 
 def log_inference(user_id: str, inputs: dict, outputs: dict):
     """Structured storage of queries for audit"""
@@ -157,6 +163,52 @@ async def trigger_training(background_tasks: BackgroundTasks, config_id: str | N
 
     background_tasks.add_task(run_training)
     return {"message": "Training pipeline started in background", "monitor_url": "/mlflow"}
+
+@app.get("/monitoring/metrics/{strategy}")
+async def get_best_metrics(strategy: str):
+    """Get metrics for the best run from the given strategy"""
+    label = "auc_score" if strategy == "auc" else "accuracy"
+    
+    exp = client.get_experiment_by_name("Edu_Predict_Experiment")
+    experiment_id = exp.experiment_id if exp is not None else 0
+
+    # Only ethical runs
+    runs = mlflow.search_runs(
+        experiment_ids=[experiment_id],
+        filter_string="tags.scenario != 'Full_Features'",
+        order_by=[f"metrics.{label} DESC"],
+        max_results=1
+    )
+    
+    if runs.empty:
+        raise HTTPException(status_code=404, detail=" No run was found")
+        
+    best_run = runs.iloc[0]
+    # Metrics extraction
+
+    metrics = {k.replace("metrics.", ""): v for k, v in best_run.items() if k.startswith("metrics.")}
+    
+    return {
+        "run_id": best_run["run_id"],
+        "scenario": best_run["tags.scenario"],
+        "metrics": metrics
+    }
+
+@app.get("/monitoring/artifact/{run_id}/{filename}")
+async def get_mlflow_artifact(run_id: str, filename: str):
+    """Download artifact from MLFow and returns as stream"""
+    try:
+        local_path = client.download_artifacts(run_id, filename)
+        if not os.path.exists(local_path):
+            logger.error(f"Artifact not found after download : {local_path}")
+            raise HTTPException(status_code=404, detail="File not found after download")
+        
+        with open(local_path, "rb") as f:
+            return Response(content=f.read(), media_type="image/png")
+    except Exception as e:
+        logger.error(f"❌ MLflow Artifact error ({filename}): {str(e)}")
+        raise HTTPException(status_code=404, detail=f"Artefact not found : {e}")
+    
 
 @app.post("/predict/{strategy}", response_model=PredictionResponse)
 async def predict(strategy: str, data: StudentInput, x_user_id: str = Header(default="anonymous")):
