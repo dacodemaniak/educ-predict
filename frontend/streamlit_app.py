@@ -12,7 +12,7 @@ API_URL = f"http://{API_HOST}:{API_PORT}"
 st.sidebar.info(f"Connecté à : {API_URL}")
 
 st.sidebar.title("🛡️ EduPredict Admin")
-menu = st.sidebar.radio("Navigation", ["Prediction", "Labo"])
+menu = st.sidebar.radio("Navigation", ["Prediction", "Run", "Labo"])
 
 # --- ONGLET PRÉDICTION ---
 if menu == "Prediction":
@@ -66,7 +66,44 @@ if menu == "Prediction":
                         st.success(f"✅ Success predicted (Risk : {prob:.2%})")
                 else:
                     st.error(f"Error {response.status_code} : {response.text}")
+elif menu == "Run":
+    st.title("🚀 Train and track")
 
+    strat_tab = st.selectbox("Choose the strategy:", ["accuracy", "auc"])
+
+    # Get data from API
+    metrics_res = requests.get(f"{API_URL}/monitoring/metrics/{strat_tab}")
+
+    if metrics_res.status_code == 200:
+        data = metrics_res.json()
+        run_id = data["run_id"]
+        scenario = data["scenario"]
+
+        # Metrics as cards
+        cols = st.columns(len(data["metrics"]))
+        for i, (name, val) in enumerate(data["metrics"].items()):
+            cols[i].metric(label=name.upper(), value=f"{val:.4f}")
+
+        # Graphics
+        st.divider()
+        c1, c2 = st.columns(2)
+        
+        with c1:
+            st.write("**Performance curve**")
+            # On détermine le nom du fichier selon l'algo (stocké en tag dans MLflow)
+            img_name = f"roc_curve_{scenario}.png" if strat_tab == "auc" else "rf_precision_recall.png"
+            st.image(f"{API_URL}/monitoring/artifact/{run_id}/{img_name}")
+            
+        with c2:
+            st.write("**Explicability (Features)**")
+            if strat_tab == "accuracy":
+                feat_img = "rf_feature_importance.png"
+            else:
+                feat_img = f"confusion_matrix_{scenario}.png"
+
+            st.image(f"{API_URL}/monitoring/artifact/{run_id}/{feat_img}")
+    else:
+        st.warning("En attente du premier entraînement conforme...")     
 # --- SETTINGS ---
 elif menu == "Labo":
     st.title("🧪 Training options labo")
