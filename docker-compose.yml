@@ -5,17 +5,27 @@ services:
       dockerfile: backend/Dockerfile
     container_name: edupredict_api
     volumes:
-      - ./backend/models:/app/models
-      - ./backend/outputs:/app/outputs
-      - ./backend/pipeline_config.yaml:/app/pipeline_config.yaml
+      - .:/app
     ports:
       - "8000:8000"
     environment:
-      - MLFLOW_TRACKING_URI=http://mlflow_server:5000
+      - MLFLOW_TRACKING_URI=sqlite:////app/mlflow.db
+      - PREFECT_API_URL=http://prefect-server:4200/api
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
 
     networks:
       - app_net
 
+  prefect_server:
+    image: prefecthq/prefect:2-latest
+    container_name: prefect_server
+    entrypoint: ["prefect", "server", "start"]
+    environment:
+      - PREFECT_SERVER_API_HOST=0.0.0.0
+    ports:
+      - "4200:4200"
+    networks:
+      - app_net
   frontend:
     build:
       context: .
