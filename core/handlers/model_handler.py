@@ -27,6 +27,7 @@ class ModelHandler(DataHandler):
         shuffled_df = cast(DataFrame, shuffle(working_df, random_state=42))
 
         try:
+            self.strategy.set_context(context=context)
             self.strategy.execute(shuffled_df, self.scenario_label)
             context.logs[f"model_{self.scenario_label}"] = "Success"
             

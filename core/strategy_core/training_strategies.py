@@ -10,11 +10,18 @@ import os
 import joblib
 from loguru import logger
 
+from core.pipeline_core.pipeline_core import PipelineContext
+
 class TrainingStrategy(ABC):
     """
     Abstraction layer for concrete strategies
     """
-
+    def __init__(self):
+        self.pipeline_context = None
+    
+    def set_context(self, context: PipelineContext) -> None:
+        self.pipeline_context = context
+    
     @abstractmethod
     def execute(self, df: pd.DataFrame, scenario_name: str):
         """
@@ -83,9 +90,13 @@ class TrainingStrategy(ABC):
 ## ==========================================================================================
 class LogisticRegressionStrategy(TrainingStrategy):
     def __init__(self, scenario_id: str, exclusions = []):
+        super().__init__()
+
         self.scenario_id = scenario_id
         # Exclusions are feed from handler
         self.exclusions = exclusions
+
+        self.yaml_parameters = {"max_iter": 1000}
 
     def execute(self, df: pd.DataFrame, scenario_name: str):
         algo_name = "LR"
@@ -145,12 +156,23 @@ class LogisticRegressionStrategy(TrainingStrategy):
 
 class RandomForestStrategy(TrainingStrategy):
     def __init__(self, scenario_id: str, exclusions = []):
+        super().__init__()
+
         self.scenario_id = scenario_id
         self.exclusions = exclusions
+        
+        self.yaml_params = {"n_estimators": 100, "random_state": 42}
 
     def execute(self, df: pd.DataFrame, scenario_name: str):
         algo_name = "RF"
 
+        # Get params : Optuna priority
+        params = self.yaml_params
+        if self.pipeline_context:
+            if self.pipeline_context.has_variable("temp_rf_params"):
+                optuna_params = self.pipeline_context.get_variable("temp_rf_params")
+                params.update(optuna_params)
+        
         logger.info(f"🚀 Scenario {scenario_name} ({algo_name}) running...")
         with mlflow.start_run(run_name=f"{algo_name}_{scenario_name}", nested=True):
             df_model = df.copy()
@@ -178,7 +200,8 @@ class RandomForestStrategy(TrainingStrategy):
             if os.path.exists(temp_feat_file):
                 os.remove(temp_feat_file)
 
-            model = RandomForestClassifier(n_estimators=100, random_state=42)
+            
+            model = RandomForestClassifier(**params)
             model.fit(X, y)
 
             # Build graphs and artifacts
@@ -220,6 +243,9 @@ class RandomForestStrategy(TrainingStrategy):
             
             y_pred = model.predict(X)
 
+            if self.pipeline_context:
+                self.pipeline_context.add_variable("last_accuracy", accuracy_score(y, y_pred))
+            
             mlflow.log_params({"scenario": self.scenario_id, "model": "RandomForest"})
             self.log_metrics(y, y_pred, metrics_type="classification")
             mlflow.sklearn.log_model(model, "model")

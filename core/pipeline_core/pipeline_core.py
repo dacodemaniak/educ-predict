@@ -46,8 +46,19 @@ class PipelineContext:
         self.logs = {}
         self.execution_time = {}
 
+        # Dynamic variables dict (hyperparameters, scores, ...)
+        self._variables = {}
+
         logger.add("logs/pipeline_debug.log", rotation="10 MB", level="DEBUG")
 
+    def add_variable(self, key: str, value: any)->None:
+        self._variables[key] = value
+    
+    def get_variable(self, key: str, default: any = None):
+        return self._variables.get(key, default)
+    
+    def has_variable(self, key: str) -> bool:
+        return key in self._variables
 class PipelineOrchestrator:
     """Orchestrate concrete handlers"""
     def __init__(self):
