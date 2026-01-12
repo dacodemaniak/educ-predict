@@ -14,10 +14,11 @@ from datetime import datetime
 from fastapi import FastAPI, HTTPException, Header, BackgroundTasks, Body, Response
 from backend.utils.validators.validators import PredictionResponse, StudentInput, FullPipelineConfig as FullConfig
 from loguru import logger
+from dotenv import load_dotenv
 
 # PROMETHEUS INSTRUMENTATOR
 from prometheus_fastapi_instrumentator import Instrumentator
-from prometheus_client import Counter, Gauge
+from prometheus_client import Counter, Gauge, Summary
 
 root_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(root_dir))
@@ -26,8 +27,19 @@ from core.pipeline_core.pipeline_core import PipelineContext, PipelineOrchestrat
 
 
 # Sets up Prometheus monitoring
-PREDICTION_COUNT = Counter('edupredict_predictions_total', 'Total number of predictions made', ['is_failure', 'strategy'])
-AVG_PROBABILITY = Gauge('edupredict_average_failure_probability', 'Average predicted failure probability')
+MODEL_PERFORMANCE = Gauge(
+    'edupredict_model_accuracy_ratio', 
+    'Accuracy of the currently deployed best model',
+    ['strategy']
+)
+DRIFT_GAUGE = Gauge(
+    'edupredict_prediction_drift_ratio', 
+    'Ratio of positive failure predictions (potential drift)'
+)
+TRAINING_TIME = Summary(
+    'edupredict_training_duration_seconds', 
+    'Time spent running the full training pipeline'
+)
 
 # --- 1. SETUP AND UTILS ---
 
@@ -101,6 +113,8 @@ async def lifespan(app: FastAPI):
     # Technicals checks at startup
     if not any(MODELS_DIR.iterdir()):
         logger.warning(f"⚠️ No models was found in {MODELS_DIR}. L'API may failed.")
+    
+    Instrumentator().instrument(app).expose(app)
     
     yield # L'application tourne ici
     
@@ -213,6 +227,8 @@ async def get_mlflow_artifact(run_id: str, filename: str):
 @app.post("/predict/{strategy}", response_model=PredictionResponse)
 async def predict(strategy: str, data: StudentInput, x_user_id: str = Header(default="anonymous")):
     try:
+        DRIFT_DETECTOR.set(new_drift_calc)
+
         # 1. Model and features loading
         model_path = MODELS_DIR / f"student_model_{strategy}_latest.joblib"
         feat_path = MODELS_DIR / f"feature_names_{strategy}_latest.pkl"
