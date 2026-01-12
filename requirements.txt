@@ -25,3 +25,7 @@ httpx
 # --- Monitoring ---
 prometheus-fastapi-instrumentator
 prometheus-client
+
+# Orchestration and tuning
+prefect
+optuna
