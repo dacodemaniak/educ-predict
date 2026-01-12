@@ -1,6 +1,9 @@
 # OS specifics
 .DS_Store
 
+# Environments
+.env
+
 # Datas
 datas
 !datas/.gitkeep

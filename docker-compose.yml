@@ -4,14 +4,13 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     container_name: edupredict_api
+    env_file: .env
     volumes:
       - .:/app
     ports:
-      - "8000:8000"
-    environment:
-      - MLFLOW_TRACKING_URI=sqlite:////app/mlflow.db
-      - PREFECT_API_URL=http://prefect-server:4200/api
-      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - "${API_PORT}:${API_PORT}"
+    depends_on:
+      - prometheus
 
     networks:
       - app_net
@@ -31,8 +30,9 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     container_name: edupredict_ui
+    env_file: .env
     ports:
-      - "8501:8501"
+      - "${STREAMLIT_PORT}:${STREAMLIT_PORT}" 
     depends_on:
       - backend
     networks:
@@ -44,7 +44,7 @@ services:
     volumes:
       - ./backend/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT}:9090"
     networks:
       - app_net
 

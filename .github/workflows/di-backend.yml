@@ -1,13 +1,52 @@
-name: Deploy Backend (GitHub)
-on: [push]
+name: Predict MLOps
+on: 
+  push: 
+    branches:
+      - main
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v3
-      - name: Run Tests
-        run: |
-          pip install pytest
-          pytest backend/tests/
-      - name: Build Docker
-        run: docker build -t my-reg/backend:${{ github.sha }} ./backend
+    - name: 🔔 Discord notification - Begin Training & Audit
+      if: always()
+      uses: sarisia/actions-status-discord@v1
+      with:
+        webhook: ${{ secrets.CICD_PIPELINE_DISCORD }}
+        status: ${{ job.status}}
+        title: "🚀 Starting Training & Audit"
+        description: "Training and audit for commit : **${{ github.event.head_commit.message }}**"
+        username: "CI/CD Bot"
+    - name: ⬇️ Code checkout
+      uses: actions/checkout@v4
+
+    - name: 🐍 Configuration Python 3.13
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    - name: 📦 Dependencies setup
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+    - name: Run Training & Audit
+      run: |
+        python core/pipeline_core/run_pipeline.py
+    - name: Discord Notification on Success
+      if: success()
+      uses: sarisia/actions-status-discord@v1
+      with:
+        webhook: ${{ secrets.CICD_PIPELINE_DISCORD }}
+        status: ${{ job.status}}
+        title: "✅ Training & Audit success"
+        description: "Training and audit for commit : **${{ github.event.head_commit.message }}**"
+        username: "CI/CD Bot"
+
+    - name: Discord Notification on Failure
+      if: failure()
+      uses: sarisia/actions-status-discord@v1
+      with:
+        webhook: ${{ secrets.CICD_PIPELINE_DISCORD }}
+        status: ${{ job.status}}
+        description: "❌ Deployment Failed: Model performance too low! for commit : **${{ github.event.head_commit.message }}**"
+        username: "CI/CD Bot"
