@@ -16,8 +16,9 @@ class TrainingStrategy(ABC):
     """
     Abstraction layer for concrete strategies
     """
-    def __init__(self):
+    def __init__(self, yaml_params: dict = None):
         self.pipeline_context = None
+        self.yaml_params = yaml_params or {}
     
     def set_context(self, context: PipelineContext) -> None:
         self.pipeline_context = context
@@ -89,14 +90,14 @@ class TrainingStrategy(ABC):
 # Concrete strategies
 ## ==========================================================================================
 class LogisticRegressionStrategy(TrainingStrategy):
-    def __init__(self, scenario_id: str, exclusions = []):
-        super().__init__()
+    def __init__(self, scenario_id: str, exclusions = [], yaml_params: dict = {}):
+        super().__init__(yaml_params=yaml_params)
 
         self.scenario_id = scenario_id
         # Exclusions are feed from handler
         self.exclusions = exclusions
 
-        self.yaml_parameters = {"max_iter": 1000}
+        self.yaml_parameters = yaml_params or {"max_iter": 1000}
 
     def execute(self, df: pd.DataFrame, scenario_name: str):
         algo_name = "LR"
@@ -155,13 +156,13 @@ class LogisticRegressionStrategy(TrainingStrategy):
             logger.info(f"🏆 Scenario {self.scenario_id} ({algo_name}) done.")
 
 class RandomForestStrategy(TrainingStrategy):
-    def __init__(self, scenario_id: str, exclusions = []):
-        super().__init__()
+    def __init__(self, scenario_id: str, exclusions = [], yaml_params: dict = {}):
+        super().__init__(yaml_params=yaml_params)
 
         self.scenario_id = scenario_id
         self.exclusions = exclusions
         
-        self.yaml_params = {"n_estimators": 100, "random_state": 42}
+        self.yaml_params = yaml_params or {"n_estimators": 100, "random_state": 42}
 
     def execute(self, df: pd.DataFrame, scenario_name: str):
         algo_name = "RF"

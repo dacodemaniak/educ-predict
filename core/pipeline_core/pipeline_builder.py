@@ -20,17 +20,25 @@ class PipelineBuilder:
                 orchestrator.add_handler(handler)
 
         # 2. Learning steps
-        learning_cfg = config['pipeline'].get('learning', {})
+        learning_cfg = config.get("pipeline", {}).get('learning', {})
         strategies = learning_cfg.get('strategies', [])
         scenarii = learning_cfg.get('scenarii', [])
 
+        # Parameters (all)
+        all_yaml_params = learning_cfg.get("params", {})
+
         for scenario in scenarii:
             for strat_name in strategies:
+                # Get yaml_params according strategy
+                cleaned = strat_name.replace("Strategy", "")
+                strategy_key = ''.join(char for char in cleaned if char.isupper()).lower()
+                strategy_yaml_key = f"{strategy_key}_params"
+                strat_params = all_yaml_params.get(strategy_yaml_key, {})
                 # Looking for strategy in the Notebook or imported files
                 strategy = PipelineBuilder._get_class_from_anywhere(
                     strat_name, 
                     "core.strategy_core.training_strategies"
-                )(scenario_id=scenario['label'], exclusions=scenario['exclusions'])
+                )(scenario_id=scenario['label'], exclusions=scenario['exclusions'], yaml_params=strat_params)
                 
                 # ModelHandler is supposed to be defined in the Notebook or pipeline_core
                 ModelHandlerClass = PipelineBuilder._get_class_from_anywhere("ModelHandler", "core.handlers.model_handler")
