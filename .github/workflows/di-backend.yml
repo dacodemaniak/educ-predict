@@ -30,8 +30,11 @@ jobs:
         pip install --upgrade pip
         pip install -r requirements.txt
     - name: Run Training & Audit
+      env:
+          MLFLOW_TRACKING_URI: "sqlite:///mlflow.db"
+          PYTHON_PATH: "."
       run: |
-        python core/pipeline_core/run_pipeline.py
+        python core/pipeline_core/tuning.py
     - name: Discord Notification on Success
       if: success()
       uses: sarisia/actions-status-discord@v1
