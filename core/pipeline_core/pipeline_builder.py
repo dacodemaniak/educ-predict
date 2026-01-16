@@ -45,7 +45,7 @@ class PipelineBuilder:
                 handler = ModelHandlerClass(strategy=strategy, scenario_label=scenario['label'])
                 orchestrator.add_handler(handler)
 
-        logger.success("✅ Pipeline dynamically orchestrated from the Notebook.")
+        logger.success("✅ Pipeline dynamically orchestrated from the configuration file.")
         return orchestrator
 
     @staticmethod
@@ -57,7 +57,6 @@ class PipelineBuilder:
         
         # 2. If not found and a module path is provided, import the .py file
         if module_path:
-            logger.debug(f"🔍 Looking for class '{class_name}' in module '{module_path}'")
             module = importlib.import_module(module_path)
             return getattr(module, class_name)
         
