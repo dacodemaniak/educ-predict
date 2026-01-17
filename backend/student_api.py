@@ -105,9 +105,42 @@ def apply_pipeline_rules(df: pd.DataFrame, feature_names: list) -> pd.DataFrame:
             
     return final_df.fillna(0)
 
+def generate_xai_advice(model, prepared_df):
+    advice = []
+    try:
+        # User feature_names_in_ as columns matching warranty
+        features = model.feature_names_in_
+        
+        if hasattr(model, "coef_"): # Logistic Regression case
+            coefs = model.coef_[0]
+            # Local impact computing: Value (0/1 or normalized) * Weight
+            impacts = prepared_df[features].values[0] * coefs
+            
+            # Sorting positive impacts (those varying to class 1: fail)
+            impact_map = sorted(zip(features, impacts), key=lambda x: x[1], reverse=True)
+            
+            for feat, impact in impact_map[:3]:
+                if impact > 0:
+                    advice.append({
+                        "feature": feat,
+                        "message": f"This factor incresase fail risk from {(impact*100):.1f}%"
+                    })
+        
+        elif hasattr(model, "feature_importances_"): # Random Forest case
+            importances = model.feature_importances_
+            impact_map = sorted(zip(features, importances), key=lambda x: x[1], reverse=True)
+            for feat, imp in impact_map[:3]:
+                advice.append({
+                    "feature": feat,
+                    "message": f"Pregnant variable identified by forest (Importance: {imp:.2f})"
+                })
+    except Exception as e:
+        logger.error(f"XAI Failure: {e}")
+    return advice
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Logique au démarrage
+    # Bootstrap logic
     logger.info("🚀 Starting EduPredict API...")
     
     # Technicals checks at startup
@@ -248,11 +281,15 @@ async def predict(strategy: str, data: StudentInput, x_user_id: str = Header(def
         prob = model.predict_proba(prepared_df)[0][1]
         
         # 3. Préparation de la réponse
+        advice = []
+        if bool(prediction) == True:
+            advice = generate_xai_advice(model=model, prepared_df=prepared_df)
         res = {
             "prediction_id": str(uuid.uuid4()),
             "model_type": strategy,
             "is_failure": bool(prediction),
             "probability": float(prob),
+            "strategic_advice": advice,
             "timestamp": datetime.now()
         }
         
