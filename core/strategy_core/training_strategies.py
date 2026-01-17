@@ -98,31 +98,42 @@ class LogisticRegressionStrategy(TrainingStrategy):
         self.scenario_id = scenario_id
         # Exclusions are feed from handler
         self.exclusions = exclusions
-
+        # Get parameters from the pipeline
         self.yaml_parameters = yaml_params or {"max_iter": 1000}
 
     def execute(self, df: pd.DataFrame, scenario_name: str):
         algo_name = "LR"
         logger.info(f"🚀 Scenario {scenario_name} ({algo_name}) running...")
 
+        df_model = df.copy() # Working on a copy
+        
+        # Get params : Optuna priority
+        params = self.yaml_params.copy()
+        if self.pipeline_context:
+            if self.pipeline_context.has_variable("temp_lr_params"):
+                optuna_params = self.pipeline_context.get_variable("temp_lr_params")
+                params.update(optuna_params)
+        
+        # Prepare datas
+        target_col = 'G3'
+        if target_col not in df_model.columns:
+            target_col = "G3_x" if "G3_x" in df_model.columns else 'G3_y'
+
+        if not target_col in df_model.columns:
+            raise KeyError(f"Target column 'G3' was not found. Available columns: {df_model.columns.tolist()}")
+        y = (df_model['G3'] < 10).astype(int)
+        
+        # Filter according scenario
+        cols_to_drop = self.exclusions + [target_col, 'source_origin']
+        X = pd.get_dummies(df_model.drop(columns=cols_to_drop, errors='ignore'), drop_first=True)
+
+        # Split logic
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y
+        )
+
         with mlflow.start_run(run_name=f"{algo_name}_{scenario_name}", nested=True):
-            # Filter according scenario
-            cols_to_drop = self.exclusions
-
-            # Prepare model target
-            df_model = df.copy() # Working on a copy
-            target_col = 'G3'
-            if target_col not in df_model.columns:
-                target_col = "G3_x" if "G3_x" in df_model.columns else 'G3_y'
-
-            if not target_col in df_model.columns:
-                raise KeyError(f"Target column 'G3' was not found. Available columns: {df_model.columns.tolist()}")
             
-            y = (df_model['G3'] < 10).astype(int)
-
-            # Remove target and technical cols
-            X = df_model.drop(columns=cols_to_drop + ['G3', 'source_origin'], errors='ignore')
-            X = pd.get_dummies(df_model.drop(columns=self.exclusions + ['G3', 'source_origin'], errors='ignore'), drop_first=True) # Encode text variables
             feature_names = X.columns.tolist()
 
             # Save feature names
@@ -136,13 +147,20 @@ class LogisticRegressionStrategy(TrainingStrategy):
             if os.path.exists(temp_feat_file):
                 os.remove(temp_feat_file)
 
-            model = LogisticRegression(max_iter=1000)
-            model.fit(X, y)
-            y_pred = model.predict(X)
+            model = LogisticRegression(**params)
+            model.fit(X_train, y_train)
+
+            y_pred_test = model.predict(X_test)
+            acc_test = accuracy_score(y_test, y_pred_test)
 
             # Logging MLFlow
             mlflow.log_params({"scenario": self.scenario_id, "model": "LogisticRegression"})
-            self.log_metrics(y, y_pred, metrics_type="classification")
+            self.log_metrics(y_test, y_pred_test, metrics_type="classification")
+            
+            # 9. Persistence
+            model_path = "models/student_model_auc_latest.joblib"
+            os.makedirs("models", exist_ok=True)
+            joblib.dump(model, model_path)
             mlflow.sklearn.log_model(model, "model")
             
             # Specific artifact Recall
@@ -153,9 +171,9 @@ class LogisticRegressionStrategy(TrainingStrategy):
             plt.close()
 
             # Common artifacts
-            self.save_artifacts(model, X, y, y_pred, scenario_name)
+            self.save_artifacts(model, X_test, y_test, y_pred_test, scenario_name)
 
-            logger.info(f"🏆 Scenario {self.scenario_id} ({algo_name}) done.")
+            logger.info(f"🏆 Scenario {self.scenario_id} ({algo_name}) done. Test Acc: {acc_test:.4f}")
 
 class RandomForestStrategy(TrainingStrategy):
     def __init__(self, scenario_id: str, exclusions = [], yaml_params: dict = {}):

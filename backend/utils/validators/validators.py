@@ -67,9 +67,13 @@ class FullPipelineConfig(BaseModel):
     pipeline: Dict[str, List[PipelineStep]]
     learning: LearningConfig
 
+class StrategicAdvice(BaseModel):
+    feature: str
+    message: str
 class PredictionResponse(BaseModel):
     prediction_id: str
     model_type: str
     is_failure: bool
     probability: float
+    stratetic_advice: Optional[List[StrategicAdvice]] = Field(default=[], description="List of factors to improve")
     timestamp: datetime
