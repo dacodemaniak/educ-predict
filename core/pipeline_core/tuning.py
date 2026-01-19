@@ -42,7 +42,6 @@ def optimize_hyperparams(algo: str = "RF"):
             return context.get_variable("last_accuracy", 0)
         except Exception as e:
             logger.error(f"❌ **PIPELINE CRITICAL FAIL** : {str(e)}")
-            sys.exit(1)
 
     study = optuna.create_study(direction="maximize")
     study.optimize(objective, n_trials=20)
