@@ -75,5 +75,5 @@ class PredictionResponse(BaseModel):
     model_type: str
     is_failure: bool
     probability: float
-    stratetic_advice: Optional[List[StrategicAdvice]] = Field(default=[], description="List of factors to improve")
+    strategic_advice: Optional[List[StrategicAdvice]] = Field(default=[], description="List of factors to improve")
     timestamp: datetime

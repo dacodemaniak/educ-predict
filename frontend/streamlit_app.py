@@ -60,8 +60,19 @@ if menu == "Prediction":
                 if response.status_code == 200:
                     data = response.json()
                     prob = data["probability"]
+                    advice = data["strategic_advice"]
                     if data["is_failure"]:
                         st.error(f"⚠️ Risk detected ({prob:.2%})")
+                        # Explainability
+                        if data["strategic_advice"]:
+                            cols = st.columns(len(data["strategic_advice"]))
+                            st.subheader("🛠️ Improvement ways")
+                            for i, advice in enumerate(data["strategic_advice"]):
+                                with cols[i]:
+                                    st.metric(label="Factor", value=advice["feature"])
+                                    st.caption(advice["message"])
+                        else:
+                            print("Unable to read strategic_advice attribute")
                     else:
                         st.success(f"✅ Success predicted (Risk : {prob:.2%})")
                 else:

@@ -115,25 +115,30 @@ def generate_xai_advice(model, prepared_df):
             coefs = model.coef_[0]
             # Local impact computing: Value (0/1 or normalized) * Weight
             impacts = prepared_df[features].values[0] * coefs
-            
             # Sorting positive impacts (those varying to class 1: fail)
             impact_map = sorted(zip(features, impacts), key=lambda x: x[1], reverse=True)
             
             for feat, impact in impact_map[:3]:
                 if impact > 0:
+                    logger.info(f"XAI from logistic regression add {feat} feature")
                     advice.append({
                         "feature": feat,
                         "message": f"This factor incresase fail risk from {(impact*100):.1f}%"
                     })
-        
+                else:
+                    logger.error(f"impact is {impact} so no feature")
+
         elif hasattr(model, "feature_importances_"): # Random Forest case
             importances = model.feature_importances_
             impact_map = sorted(zip(features, importances), key=lambda x: x[1], reverse=True)
             for feat, imp in impact_map[:3]:
+                logger.info(f"XAI from random forest add {feat} feature")
                 advice.append({
                     "feature": feat,
                     "message": f"Pregnant variable identified by forest (Importance: {imp:.2f})"
                 })
+        else:
+            logger.error(f"xai doesn't return any metrics : coef_ or feature_importance_")
     except Exception as e:
         logger.error(f"XAI Failure: {e}")
     return advice
@@ -282,8 +287,10 @@ async def predict(strategy: str, data: StudentInput, x_user_id: str = Header(def
         
         # 3. Préparation de la réponse
         advice = []
+        
         if bool(prediction) == True:
             advice = generate_xai_advice(model=model, prepared_df=prepared_df)
+            logger.info(f"Advice was added : {len(advice)}")
         res = {
             "prediction_id": str(uuid.uuid4()),
             "model_type": strategy,
