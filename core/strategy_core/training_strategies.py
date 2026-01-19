@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 import pandas as pd
 import mlflow
+import matplotlib
+matplotlib.use('Agg') # Server mode forced
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
@@ -103,6 +105,12 @@ class LogisticRegressionStrategy(TrainingStrategy):
 
     def execute(self, df: pd.DataFrame, scenario_name: str):
         algo_name = "LR"
+
+        is_tuning = False
+        if self.pipeline_context and self.pipeline_context.has_variable("is_tuning"):
+            is_tuning = self.pipeline_context.get_variable("is_tuning")
+        
+
         logger.info(f"🚀 Scenario {scenario_name} ({algo_name}) running...")
 
         df_model = df.copy() # Working on a copy
@@ -163,15 +171,16 @@ class LogisticRegressionStrategy(TrainingStrategy):
             joblib.dump(model, model_path)
             mlflow.sklearn.log_model(model, "model")
             
-            # Specific artifact Recall
-            pr_display = PrecisionRecallDisplay.from_estimator(model, X, y)
-            pr_display.figure_.suptitle(f"PR Curve - {scenario_name}")
-            plt.savefig("outputs/plots/pr_curve.png")
-            mlflow.log_artifact("outputs/plots/pr_curve.png")
-            plt.close()
+            if not is_tuning:
+                # Specific artifact Recall
+                pr_display = PrecisionRecallDisplay.from_estimator(model, X, y)
+                pr_display.figure_.suptitle(f"PR Curve - {scenario_name}")
+                plt.savefig("outputs/plots/pr_curve.png")
+                mlflow.log_artifact("outputs/plots/pr_curve.png")
+                plt.close()
 
-            # Common artifacts
-            self.save_artifacts(model, X_test, y_test, y_pred_test, scenario_name)
+                # Common artifacts
+                self.save_artifacts(model, X_test, y_test, y_pred_test, scenario_name)
 
             logger.info(f"🏆 Scenario {self.scenario_id} ({algo_name}) done. Test Acc: {acc_test:.4f}")
 
@@ -198,6 +207,10 @@ class RandomForestStrategy(TrainingStrategy):
         algo_name = "RF"
         from imblearn.pipeline import Pipeline as ImbPipeline
         from imblearn.over_sampling import SMOTE
+
+        is_tuning = False
+        if self.pipeline_context and self.pipeline_context.has_variable("is_tuning"):
+            is_tuning = self.pipeline_context.get_variable("is_tuning")
 
         # Get params : Optuna priority
         params = self.yaml_params.copy()
@@ -385,38 +398,39 @@ class RandomForestStrategy(TrainingStrategy):
                 **params
             })
 
-            # Build graphs and artifacts
-            import numpy as np
-            # 1. Feature Importance Plot
-            importances = model.feature_importances_
-            indices = np.argsort(importances[-10:]) # 10 bests
-            plt.figure(figsize=(10, 6))
-            plt.title("RF Importances top ten")
-            plt.barh(range(len(indices)), importances[indices], align="center")
-            plt.yticks(range(len(indices)), [X.columns[i] for i in indices])
-            plt.xlabel("Relative Importance")
-            plt.tight_layout()
+            if not is_tuning:
+                # Build graphs and artifacts
+                import numpy as np
+                # 1. Feature Importance Plot
+                importances = model.feature_importances_
+                indices = np.argsort(importances[-10:]) # 10 bests
+                plt.figure(figsize=(10, 6))
+                plt.title("RF Importances top ten")
+                plt.barh(range(len(indices)), importances[indices], align="center")
+                plt.yticks(range(len(indices)), [X.columns[i] for i in indices])
+                plt.xlabel("Relative Importance")
+                plt.tight_layout()
 
-            # Save and log
-            feat_imp_path = "outputs/plots/rf_feature_importance.png"
-            plt.savefig(feat_imp_path)
-            mlflow.log_artifact(feat_imp_path)
-            plt.close()
+                # Save and log
+                feat_imp_path = "outputs/plots/rf_feature_importance.png"
+                plt.savefig(feat_imp_path)
+                mlflow.log_artifact(feat_imp_path)
+                plt.close()
 
-            # Precision-Recall Curve
-            from sklearn.metrics import PrecisionRecallDisplay
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
-            PrecisionRecallDisplay.from_estimator(model, X_train, y_train, ax=ax1, name="Train")
-            ax1.set_title(f"Precision-Recall Curve - Train - {scenario_name}")
-            pr_display_test = PrecisionRecallDisplay.from_estimator(model, X_test, y_test, ax=ax2, name="Test")
-            ax2.set_title(f"PR Curve - TEST - {scenario_name}")
+                # Precision-Recall Curve
+                from sklearn.metrics import PrecisionRecallDisplay
+                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+                PrecisionRecallDisplay.from_estimator(model, X_train, y_train, ax=ax1, name="Train")
+                ax1.set_title(f"Precision-Recall Curve - Train - {scenario_name}")
+                pr_display_test = PrecisionRecallDisplay.from_estimator(model, X_test, y_test, ax=ax2, name="Test")
+                ax2.set_title(f"PR Curve - TEST - {scenario_name}")
 
-            pr_path = "outputs/plots/rf_precision_recall.png"
-            plt.tight_layout()
-            plt.savefig(pr_path)
-            # Log
-            mlflow.log_artifact(pr_path)
-            plt.close()
+                pr_path = "outputs/plots/rf_precision_recall.png"
+                plt.tight_layout()
+                plt.savefig(pr_path)
+                # Log
+                mlflow.log_artifact(pr_path)
+                plt.close()
 
             # Log Average Precision on TEST
             y_prob_test = model.predict_proba(X_test)[:, 1]
@@ -432,7 +446,8 @@ class RandomForestStrategy(TrainingStrategy):
             plt.close()
             
             # ⭐ Confusion Matrix sur TEST
-            self.save_artifacts(model, X_test, y_test, y_pred_test, f"{scenario_name}_TEST")            
+            if not is_tuning:
+                self.save_artifacts(model, X_test, y_test, y_pred_test, f"{scenario_name}_TEST")            
             
             logger.info(f"🏆 Scenario {self.scenario_id} ({algo_name}) completed.")
             logger.info(f"📊 Final Test Accuracy: {acc_test:.3f} | Test F1: {f1_test:.3f}")

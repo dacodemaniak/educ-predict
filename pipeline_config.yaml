@@ -1,72 +1,77 @@
 pipeline:
   data_processing:
-    - step: DataLoader
-      params:
-        files_to_load:
-          maths: "datas/student-mat.csv"
-          por: "datas/student-por.csv"
-        sep: ";" # Correction du séparateur ici
-
-    - step: SensitiveDataHandler
-      params:
-        sensitive_columns: ["romantic", "Dalc", "Walc"]
-
-    - step: MergerHandler
-
-    - step: MinimizerHandler
-      params:
-        mapping:
-          Mjob: {"health": "other", "at_home": "other"}
-          Fjob: {"health": "other", "at_home": "other"}
-
-    - step: AnonymizerHandler
-      params:
-        binning_rules:
-          age_limit: 19
-          mask_school: true
-
-    - step: EncodingHandler # Préparation finale pour le Random Forest
-
-    - step: OutlierHandler
-      strategy: IsolationForestStrategy
-      params:
-        contamination: 0.01
-        target_columns: ["studytime", "absences", "age"]
-
-    - step: ImputationHandler
-      strategy: AIImputationStrategy
-      params:
-        max_iter: 10
-
-    - step: ComplianceAuditHandler
-      params:
-        output_dir: "outputs"
-        
-    - step: DataExportHandler
-
+  - params:
+      files_to_load:
+        maths: datas/student-mat.csv
+        por: datas/student-por.csv
+      sep: ;
+    step: DataLoader
+  - params:
+      sensitive_columns:
+      - romantic
+      - Dalc
+      - Walc
+    step: SensitiveDataHandler
+  - step: MergerHandler
+  - params:
+      mapping:
+        Fjob:
+          at_home: other
+          health: other
+        Mjob:
+          at_home: other
+          health: other
+    step: MinimizerHandler
+  - params:
+      binning_rules:
+        age_limit: 19
+        mask_school: true
+    step: AnonymizerHandler
+  - step: EncodingHandler
+  - params:
+      contamination: 0.01
+      target_columns:
+      - studytime
+      - absences
+      - age
+    step: OutlierHandler
+    strategy: IsolationForestStrategy
+  - params:
+      max_iter: 10
+    step: ImputationHandler
+    strategy: AIImputationStrategy
+  - params:
+      output_dir: outputs
+    step: ComplianceAuditHandler
+  - step: DataExportHandler
   learning:
-    strategies:
-      - LogisticRegressionStrategy
-      - RandomForestStrategy
-    # Optuna params suggestions
     params:
-          rf_params:
-            n_estimators: 200
-            max_depth: 8
-            min_samples_leaf: 20
-            min_samples_split: 40 
-            max_features: "sqrt" 
-            class_weight: "balanced"
-            bootstrap: true 
-            oob_score: true 
-            random_state: 42
-          lr_params:
-            C: 1.0
-            solver: "lbfgs"
+      lr_params:
+        C: 0.02127538093709556
+        max_iter: 2304
+        solver: lbfgs
+      rf_params:
+        bootstrap: true
+        class_weight: balanced
+        max_depth: 5
+        max_features: sqrt
+        min_samples_leaf: 20
+        min_samples_split: 7
+        n_estimators: 107
+        oob_score: true
+        random_state: 42
     scenarii:
-      - label: "Full_Features"
-        exclusions: []
-      - label: "No_Sensitive"
-        exclusions: ["romantic", "Dalc", "Walc"]
-      - label: "No_G1_G2"
-        exclusions: ["G1", "G2"]
+    - exclusions: []
+      label: Full_Features
+    - exclusions:
+      - romantic
+      - Dalc
+      - Walc
+      label: No_Sensitive
+    - exclusions:
+      - G1
+      - G2
+      label: No_G1_G2
+    strategies:
+    - LogisticRegressionStrategy
+    - RandomForestStrategy

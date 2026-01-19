@@ -132,12 +132,25 @@ elif menu == "Labo":
     
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("💾 Create an Experiment"):
+        if st.button("💾 Create a manual Experiment"):
             save_res = requests.post(f"{API_URL}/configuration/experiment", json=json.loads(new_config_str))
             if save_res.status_code == 200:
                 st.success(f"Settings saved : {save_res.json()['experiment_id']}")
+                if st.button("🚀 Train with this settings"):
+                    train_res = requests.post(f"{API_URL}/train", params={"config_id": selected_file})
+                    st.warning("Training launched in background...")
     
     with col2:
-        if st.button("🚀 Train with this settings"):
-            train_res = requests.post(f"{API_URL}/train", params={"config_id": selected_file})
-            st.warning("Training launched in background...")
+        # Option Smart Retraining
+        use_optuna = st.checkbox("Enable automatic optimization (Optuna)", value=False, help="Looking for best hyper parameters before model finalization")
+        if st.button("Smart training"):
+            with st.spinner("Pipeline initialization..."):
+                # Call the API with use_tuning
+                params = {"use_tuning": use_optuna}
+                res = requests.post(f"{API_URL}/train", params=params)
+                
+                if res.status_code == 200:
+                    st.success(f"Pipeline start in background (Mode: {'Optimized' if use_optuna else 'Standard'})")
+                    st.link_button("Follow in MLFlow", f"{API_URL}/mlflow")
+                else:
+                    st.error("Failed to load the pipeline")        

@@ -26,6 +26,7 @@ from core.pipeline_core.pipeline_builder import PipelineBuilder
 from core.pipeline_core.pipeline_core import PipelineContext, PipelineOrchestrator
 
 
+
 # Sets up Prometheus monitoring
 MODEL_PERFORMANCE = Gauge(
     'edupredict_model_accuracy_ratio', 
@@ -200,21 +201,39 @@ def save_experiment(config: FullConfig):
 # --- 4. CORE ROUTES (Train & Predict) ---
 
 @app.post("/train")
-async def trigger_training(background_tasks: BackgroundTasks, config_id: str | None = None):
+async def trigger_training(background_tasks: BackgroundTasks, config_id: str | None = None, use_tuning: bool = False):
     def run_training():
-        # Here we would instantiate the PipelineBuilder with config_id if present
-        logger.info(f"🚀 Training started with config: {config_id or 'BASE'}")
-        orchestrator = PipelineOrchestrator()
-        PipelineBuilder.build_from_yaml(
-            config_path=config_id if config_id else CONFIG_BASE,
-            orchestrator=orchestrator
-        )
-        context = PipelineContext()
-        orchestrator.run(context)
-        logger.success("✅ Background training completed.")
+        try:
+            if use_tuning:
+                # Import flow from tuning
+                try:
+                    from core.pipeline_core.tuning import training_flow
+                except ImportError:
+                    logger.warning("⚠️ Tuned training flow cannot be imported")
+                logger.info("🚀 Starting Smart Retraining (Optuna + Prefect)...")
+                # Direct call to flow
+                training_flow()
+                logger.success("✅ Smart Retraining completed and config updated.")
+            else:
+                # Standard training using presets hyper parameters
+                logger.info(f"🚀 Training started with config: {config_id or 'BASE'}")
+                orchestrator = PipelineOrchestrator()
+                PipelineBuilder.build_from_yaml(
+                    config_path=config_id if config_id else CONFIG_BASE,
+                    orchestrator=orchestrator
+                )
+                context = PipelineContext()
+                orchestrator.run(context)
+                logger.success("✅ Background training completed.")
+        except Exception as e:
+            logger.error(f"❌ Critical failure during background training: {e}")
 
     background_tasks.add_task(run_training)
-    return {"message": "Training pipeline started in background", "monitor_url": "/mlflow"}
+    return {
+        "message": "Training pipeline started in background",
+        "mode": "Optimization (Optuna)" if use_tuning else "Standard",
+        "monitor_url": "/mlflow"
+    }
 
 @app.get("/monitoring/metrics/{strategy}")
 async def get_best_metrics(strategy: str):

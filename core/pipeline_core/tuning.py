@@ -18,6 +18,8 @@ def optimize_hyperparams(algo: str = "RF"):
         orchestrator = PipelineOrchestrator()
         context = PipelineContext()
         
+        context.add_variable("is_tuning", True)
+
         if algo == "RF":
             params = {
                 "n_estimators": trial.suggest_int("n_estimators", 50, 200),
@@ -28,7 +30,7 @@ def optimize_hyperparams(algo: str = "RF"):
         else:
             params = {
                 "C": trial.suggest_float("C", 0.001, 10.0, log=True),
-                "max_iter": trial.suggest_int("max_iter", 100, 2000)
+                "max_iter": trial.suggest_int("max_iter", 500, 3000)
             }
             context.add_variable("temp_lr_params", params)
         
