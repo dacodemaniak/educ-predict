@@ -196,6 +196,8 @@ class RandomForestStrategy(TrainingStrategy):
 
     def execute(self, df: pd.DataFrame, scenario_name: str):
         algo_name = "RF"
+        from imblearn.pipeline import Pipeline as ImbPipeline
+        from imblearn.over_sampling import SMOTE
 
         # Get params : Optuna priority
         params = self.yaml_params.copy()
@@ -204,7 +206,7 @@ class RandomForestStrategy(TrainingStrategy):
                 optuna_params = self.pipeline_context.get_variable("temp_rf_params")
                 params.update(optuna_params)
         
-        logger.info(f"🚀 Scenario {scenario_name} ({algo_name}) running with params : {params}")
+        logger.info(f"🚀 Scenario {scenario_name} ({algo_name}) running with original params : {params}")
 
         with mlflow.start_run(run_name=f"{algo_name}_{scenario_name}", nested=True):
             df_model = df.copy()
@@ -224,18 +226,8 @@ class RandomForestStrategy(TrainingStrategy):
 
             # ⭐ Check dataset size
             logger.info(f"📊 Dataset total size: {len(X)}")
-            logger.info(f"📊 Class distribution: {y.value_counts().to_dict()}")
-
-            # ⭐ Adjust min_samples_leaf according to the size
-            dataset_size = len(X)
-            min_class_size = y.value_counts().min()
-
-            # Si minor class < 50, reduce constraints
-            if min_class_size < 50:
-                logger.warning(f"⚠️ Minor small class ({min_class_size}),adjusting params")
-                params["min_samples_leaf"] = max(5, min_class_size // 10)  # At least 5, max 10% for minor class
-                params["min_samples_split"] = max(10, min_class_size // 5)
-                logger.info(f"🔧 Adjusted: min_samples_leaf={params['min_samples_leaf']}, min_samples_split={params['min_samples_split']}")
+            class_counts = y.value_counts().to_dict()
+            logger.info(f"📊 Class distribution: {class_counts}")
 
             # Stratified train/test split (80 / 20)
             X_train, X_test, y_train, y_test = train_test_split(
@@ -246,8 +238,73 @@ class RandomForestStrategy(TrainingStrategy):
             )
 
             logger.info(f"📊 Train size: {len(X_train)}, Test size: {len(X_test)}")
-            logger.info(f"📊 Train class distribution: {y_train.value_counts().to_dict()}")
-            logger.info(f"📊 Test class distribution: {y_test.value_counts().to_dict()}")   
+            train_class_counts = y_train.value_counts()
+            logger.info(f"📊 Train class distribution: {train_class_counts.to_dict()}")
+            logger.info(f"📊 Test class distribution: {y_test.value_counts().to_dict()}")  
+            
+            # Decision : use SMOTE or not
+            min_class_size = train_class_counts.min()
+            max_class_size = train_class_counts.max()
+            imbalance_ratio = min_class_size / max_class_size
+
+            # Decision thresholds
+            IMBALANCE_THRESHOLD = 0.5
+            MIN_CLASS_THRESHOLD = 100
+
+            use_smote = (imbalance_ratio < IMBALANCE_THRESHOLD) or (min_class_size < MIN_CLASS_THRESHOLD)
+
+            logger.info(f"📊 Imbalance ratio: {imbalance_ratio:.2%} (minority/majority)")
+            logger.info(f"📊 Decision: {'✅ USING SMOTE' if use_smote else '❌ NO SMOTE (classes balanced enough)'}")
+
+            if use_smote:
+                logger.info(f"🔧 Configuring SMOTE pipeline...")
+                k_neighbors = min(5, min_class_size - 1)
+
+                # class_weight cannot be used with SMOTE
+                if "class_weight" in params:
+                    original_class_weight = params.pop("class_weight")
+                    logger.info(f"🔧 Removed class_weight='{original_class_weight}' (using SMOTE instead)")
+                
+                # Adjust min_samples for a small dataset
+                params["min_samples_leaf"] = 5
+                params["min_samples_split"] = 10
+
+                # Disable OOB score (uncompatible with SMOTE)
+                if "oob_score" in params:
+                    params["oob_score"] = False
+                    logger.info(f"🔧 Disabled oob_score (SMOTE context)")
+
+                logger.info(f"🔧 Adjusted params for SMOTE: {params}")                    
+                # Build a pipeline from SMOTE
+                model_pipeline = ImbPipeline([
+                    ('smote', SMOTE(random_state=42, k_neighbors=k_neighbors, sampling_strategy=0.8)),
+                    ('classifier', RandomForestClassifier(**params))
+                ])
+                logger.info(f"🔧 SMOTE configured: k_neighbors={k_neighbors}, sampling_strategy=0.8")
+                mlflow.set_tag("uses_smote", "YES")
+                mlflow.log_param("smote_k_neighbors", k_neighbors)
+                mlflow.log_param("smote_sampling_strategy", 0.8)
+            else:
+                # Using classic mode
+                logger.info(f"🔧 Using standard RandomForest (no SMOTE needed)")
+                if imbalance_ratio < 0.8:
+                    if "class_weight" not in params:
+                        params["class_weight"] = "balanced"
+                        logger.info(f"🔧 Keeping class_weight='balanced' for slight imbalance")
+                # Adjusting min_samples according dataset size
+                n_splits = 5
+                min_class_per_fold = min_class_size // n_splits
+
+                if min_class_per_fold < 50:
+                    params["min_samples_leaf"] = max(5, min_class_per_fold // 6)
+                    params["min_samples_split"] = max(10, 2 * params["min_samples_leaf"])
+                    logger.info(f"🔧 Adjusted params for small dataset: min_samples_leaf={params['min_samples_leaf']}, min_samples_split={params['min_samples_split']}")
+                # Build a simple "pipeline" simple (without SMOTE)
+                model_pipeline = ImbPipeline([
+                    ('classifier', RandomForestClassifier(**params))
+                ])
+                
+                mlflow.set_tag("uses_smote", "NO")
 
             # Save feature names
             temp_feat_file = "backend/models/feature_names.pkl"
@@ -261,18 +318,14 @@ class RandomForestStrategy(TrainingStrategy):
                 os.remove(temp_feat_file)
 
 
-
-            # Model with updated hyper parameters
-            model = RandomForestClassifier(**params)
-            model.fit(X, y)
-
-            # Cross validation
-            cv_strategy = StratifiedKFold(n_splits=10, shuffle=True, random_state=params.get("random_state", 42))
-            cv_scores_acc = cross_val_score(model, X_train, y_train, cv=cv_strategy, scoring='accuracy', n_jobs=-1)
-            cv_scores_f1 = cross_val_score(model, X_train, y_train, cv=cv_strategy, scoring="f1", n_jobs=-1)
-            cv_scores_ap = cross_val_score(model, X_train, y_train, cv=cv_strategy, scoring=make_scorer(average_precision_score, needs_proba=True), n_jobs=-1)
+            # Cross validation with SMOTE pipeline (applyied in each fold)
+            cv_strategy = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+            cv_scores_acc = cross_val_score(model_pipeline, X_train, y_train, 
+                                            cv=cv_strategy, scoring='accuracy', n_jobs=-1)
+            cv_scores_f1 = cross_val_score(model_pipeline, X_train, y_train, 
+                                            cv=cv_strategy, scoring="f1", n_jobs=-1)
+            cv_scores_ap = cross_val_score(model_pipeline, X_train, y_train, cv=cv_strategy, scoring=make_scorer(average_precision_score, needs_proba=True), n_jobs=-1)
             
-
             logger.info(f"📈 CV Accuracy: {cv_scores_acc.mean():.3f} ± {cv_scores_acc.std():.3f}")
             logger.info(f"📈 CV F1-Score: {cv_scores_f1.mean():.3f} ± {cv_scores_f1.std():.3f}")
             logger.info(f"📈 CV Avg Precision: {cv_scores_ap.mean():.3f} ± {cv_scores_ap.std():.3f}")
@@ -283,8 +336,13 @@ class RandomForestStrategy(TrainingStrategy):
             mlflow.log_metric("cv_f1_mean", cv_scores_f1.mean())
             mlflow.log_metric("cv_avg_precision_mean", cv_scores_ap.mean())
 
+            # Fit final sur train complet
+            model_pipeline.fit(X_train, y_train)
+
+            model = model_pipeline.named_steps['classifier']
+
             # ⭐ OOB SCORE (Out-of-Bag = validation "free")
-            if hasattr(model, 'oob_score_'):
+            if not use_smote and hasattr(model, 'oob_score_'):
                 logger.info(f"📈 OOB Score: {model.oob_score_:.3f}")
                 mlflow.log_metric("oob_score", model.oob_score_)
 
@@ -309,11 +367,11 @@ class RandomForestStrategy(TrainingStrategy):
                 logger.warning(f"⚠️  OVERFITTING DETECTED! Gap = {overfitting_gap:.3f}")
                 mlflow.set_tag("overfitting_warning", "YES")
 
-            mlflow.log_metric("accuracy_train", acc_train)
-            mlflow.log_metric("accuracy_test", acc_test)
-            mlflow.log_metric("accuracy_gap", overfitting_gap)
-            mlflow.log_metric("f1_train", f1_train)
-            mlflow.log_metric("f1_test", f1_test)
+            mlflow.log_metric("accuracy_train", float(acc_train))
+            mlflow.log_metric("accuracy_test", float(acc_test))
+            mlflow.log_metric("accuracy_gap", float(overfitting_gap))
+            mlflow.log_metric("f1_train", float(f1_train))
+            mlflow.log_metric("f1_test", float(f1_test))
 
             # Store test accuracy
             if self.pipeline_context:

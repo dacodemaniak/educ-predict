@@ -260,7 +260,7 @@ async def get_mlflow_artifact(run_id: str, filename: str):
 @app.post("/predict/{strategy}", response_model=PredictionResponse)
 async def predict(strategy: str, data: StudentInput, x_user_id: str = Header(default="anonymous")):
     try:
-        DRIFT_DETECTOR.set(new_drift_calc)
+        #DRIFT_DETECTOR.set(new_drift_calc)
 
         # 1. Model and features loading
         model_path = MODELS_DIR / f"student_model_{strategy}_latest.joblib"
@@ -297,8 +297,8 @@ async def predict(strategy: str, data: StudentInput, x_user_id: str = Header(def
         log_inference(x_user_id, data.model_dump(), jsonable_encoder(res))
         
         # Mise à jour des métriques Prometheus
-        PREDICTION_COUNT.labels(is_failure=str(prediction), strategy=strategy).inc()
-        AVG_PROBABILITY.set(prob)
+        #PREDICTION_COUNT.labels(is_failure=str(prediction), strategy=strategy).inc()
+        #AVG_PROBABILITY.set(prob)
 
         return jsonable_encoder(res)
     except Exception as e:
