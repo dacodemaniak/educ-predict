@@ -23,9 +23,12 @@ class TrainingStrategy(ABC):
     def __init__(self, yaml_params: dict = None):
         self.pipeline_context = None
         self.yaml_params = yaml_params or {}
+        self.is_tuning = False
     
     def set_context(self, context: PipelineContext) -> None:
         self.pipeline_context = context
+        if context and context.has_variable("is_tuning"):
+            self.is_tuning = context.get_variable("is_tuning")
     
     @abstractmethod
     def execute(self, df: pd.DataFrame, scenario_name: str):
@@ -48,47 +51,50 @@ class TrainingStrategy(ABC):
             mlflow.log_metric("f1_score", f1_score(y_true=y_true, y_pred=y_pred))
 
     def save_artifacts(self, model, X, y, y_pred, scenario_name):
+        if not self.is_tuning:
         # Confusion matrix
-        plt.figure(figsize=(8,6))
-        cm = confusion_matrix(y, y_pred)
-        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
-                    xticklabels=["Success", "Failed"],
-                    yticklabels=["Success", "Failed"]
-        )
-        plt.title(f"Confusion Matrix {scenario_name}")
-        plt.ylabel('Real')
-        plt.xlabel('Predicted')
-        cm_path = f"outputs/plots/confusion_matrix_{scenario_name}.png"
-        plt.savefig(cm_path)
-        mlflow.log_artifact(cm_path)
-        plt.close()
+            plt.figure(figsize=(8,6))
+            cm = confusion_matrix(y, y_pred)
+            sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+                        xticklabels=["Success", "Failed"],
+                        yticklabels=["Success", "Failed"]
+            )
+            plt.title(f"Confusion Matrix {scenario_name}")
+            plt.ylabel('Real')
+            plt.xlabel('Predicted')
+            cm_path = f"outputs/plots/confusion_matrix_{scenario_name}.png"
+            plt.savefig(cm_path)
+            mlflow.log_artifact(cm_path)
+            plt.close()
 
-        # Correlation matrix
-        plt.figure(figsize=(12,10))
-        corr = X.corr()
-        sns.heatmap(corr, annot=False, cmap="coolwarm")
-        plt.title(f"Features correlation - {scenario_name}")
-        corr_path = f"outputs/plots/correlation_{scenario_name}.png"
-        plt.savefig(corr_path)
-        mlflow.log_artifact(corr_path)
-        plt.close()
+            # Correlation matrix
+            plt.figure(figsize=(12,10))
+            corr = X.corr()
+            sns.heatmap(corr, annot=False, cmap="coolwarm")
+            plt.title(f"Features correlation - {scenario_name}")
+            corr_path = f"outputs/plots/correlation_{scenario_name}.png"
+            plt.savefig(corr_path)
+            mlflow.log_artifact(corr_path)
+            plt.close()
 
-        # ROC curve : Receiver Operating Characteristic
-        # Use AUC metric (Area Under the Curve)
-        plt.figure(figsize=(8,6))
-        # Class 1 (failed) probality
-        y_prob = model.predict_proba(X)[:, 1] if hasattr(model, "predict_proba") else y_pred
+            # ROC curve : Receiver Operating Characteristic
+            # Use AUC metric (Area Under the Curve)
+            plt.figure(figsize=(8,6))
+            # Class 1 (failed) probality
+            y_prob = model.predict_proba(X)[:, 1] if hasattr(model, "predict_proba") else y_pred
 
-        RocCurveDisplay.from_predictions(y, y_prob, name=scenario_name)
-        plt.plot([0,1], [0,1], "k--", label="Chance (AUC=0.5)")
-        plt.title(f"ROC curve - {scenario_name}")
-        roc_path = f"outputs/plots/roc_curve_{scenario_name}.png"
-        plt.savefig(roc_path)
-        mlflow.log_artifact(roc_path)
+            RocCurveDisplay.from_predictions(y, y_prob, name=scenario_name)
+            plt.plot([0,1], [0,1], "k--", label="Chance (AUC=0.5)")
+            plt.title(f"ROC curve - {scenario_name}")
+            roc_path = f"outputs/plots/roc_curve_{scenario_name}.png"
+            plt.savefig(roc_path)
+            mlflow.log_artifact(roc_path)
 
-        # Log AUC in metrics
-        fpr, tpr, _ = roc_curve(y, y_prob)
-        mlflow.log_metric("auc_score", auc(fpr, tpr))
+            # Log AUC in metrics
+            fpr, tpr, _ = roc_curve(y, y_prob)
+            mlflow.log_metric("auc_score", auc(fpr, tpr))
+        else:
+            logger.debug(f"⏭️ Skipping artifacts for {scenario_name} (Tuning mode)")
 
 ## ==========================================================================================
 # Concrete strategies
@@ -105,11 +111,6 @@ class LogisticRegressionStrategy(TrainingStrategy):
 
     def execute(self, df: pd.DataFrame, scenario_name: str):
         algo_name = "LR"
-
-        is_tuning = False
-        if self.pipeline_context and self.pipeline_context.has_variable("is_tuning"):
-            is_tuning = self.pipeline_context.get_variable("is_tuning")
-        
 
         logger.info(f"🚀 Scenario {scenario_name} ({algo_name}) running...")
 
@@ -171,7 +172,7 @@ class LogisticRegressionStrategy(TrainingStrategy):
             joblib.dump(model, model_path)
             mlflow.sklearn.log_model(model, "model")
             
-            if not is_tuning:
+            if not self.is_tuning:
                 # Specific artifact Recall
                 pr_display = PrecisionRecallDisplay.from_estimator(model, X, y)
                 pr_display.figure_.suptitle(f"PR Curve - {scenario_name}")
@@ -207,10 +208,6 @@ class RandomForestStrategy(TrainingStrategy):
         algo_name = "RF"
         from imblearn.pipeline import Pipeline as ImbPipeline
         from imblearn.over_sampling import SMOTE
-
-        is_tuning = False
-        if self.pipeline_context and self.pipeline_context.has_variable("is_tuning"):
-            is_tuning = self.pipeline_context.get_variable("is_tuning")
 
         # Get params : Optuna priority
         params = self.yaml_params.copy()
@@ -398,7 +395,7 @@ class RandomForestStrategy(TrainingStrategy):
                 **params
             })
 
-            if not is_tuning:
+            if not self.is_tuning:
                 # Build graphs and artifacts
                 import numpy as np
                 # 1. Feature Importance Plot
@@ -438,16 +435,16 @@ class RandomForestStrategy(TrainingStrategy):
             mlflow.log_metric("average_precision_test", ap_test)
 
             # One Tree
-            from sklearn.tree import plot_tree
-            plt.figure(figsize=(20, 10))
-            plot_tree(model.estimators_[0], max_depth=3, feature_names=X.columns.tolist(), filled=True, rounded=True)
-            plt.savefig("outputs/plots/rf_individual_tree.png")
-            mlflow.log_artifact("outputs/plots/rf_individual_tree.png")
-            plt.close()
+            if not self.is_tuning:
+                from sklearn.tree import plot_tree
+                plt.figure(figsize=(20, 10))
+                plot_tree(model.estimators_[0], max_depth=3, feature_names=X.columns.tolist(), filled=True, rounded=True)
+                plt.savefig("outputs/plots/rf_individual_tree.png")
+                mlflow.log_artifact("outputs/plots/rf_individual_tree.png")
+                plt.close()
             
             # ⭐ Confusion Matrix sur TEST
-            if not is_tuning:
-                self.save_artifacts(model, X_test, y_test, y_pred_test, f"{scenario_name}_TEST")            
+            self.save_artifacts(model, X_test, y_test, y_pred_test, f"{scenario_name}_TEST")            
             
             logger.info(f"🏆 Scenario {self.scenario_id} ({algo_name}) completed.")
             logger.info(f"📊 Final Test Accuracy: {acc_test:.3f} | Test F1: {f1_test:.3f}")
