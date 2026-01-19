@@ -2,6 +2,7 @@
 pandas
 scikit-learn
 mlflow
+imbalanced-learn
 loguru
 
 # --- Viz (Used in Learn Strategies) ---
